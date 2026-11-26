@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
+import com.expensetracker.data.EntryType
 import com.expensetracker.data.Expense
 import com.expensetracker.data.ExpenseRepository
 import com.expensetracker.data.SettingsRepository
@@ -19,36 +20,45 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 
-data class DayGroup(val date: LocalDate, val total: Double, val items: List<Expense>)
+data class DayGroup(val date: LocalDate, val spent: Double, val received: Double, val items: List<Expense>)
+
+private data class Filters(
+    val month: YearMonth = YearMonth.now(),
+    val query: String = "",
+    val category: Category? = null,
+    val type: EntryType? = null,
+)
 
 data class HistoryUiState(
     val loading: Boolean = true,
     val month: YearMonth = YearMonth.now(),
     val query: String = "",
     val category: Category? = null,
+    val type: EntryType? = null,
     val groups: List<DayGroup> = emptyList(),
-    val total: Double = 0.0,
+    val spent: Double = 0.0,
+    val received: Double = 0.0,
     val count: Int = 0,
     val currency: AppCurrency = AppCurrency.USD,
 ) {
     val canGoNext: Boolean get() = month < YearMonth.now()
-    val isFiltered: Boolean get() = query.isNotBlank() || category != null
+    val isFiltered: Boolean get() = query.isNotBlank() || category != null || type != null
 }
 
 class HistoryViewModel(
     private val expenses: ExpenseRepository,
     settings: SettingsRepository,
 ) : ViewModel() {
-    private val month = MutableStateFlow(YearMonth.now())
-    private val query = MutableStateFlow("")
-    private val category = MutableStateFlow<Category?>(null)
+    private val filters = MutableStateFlow(Filters())
     private var lastDeleted: Expense? = null
 
     val uiState: StateFlow<HistoryUiState> =
-        combine(expenses.expenses, settings.settings, month, query, category) { all, prefs, month, query, category ->
+        combine(expenses.expenses, settings.settings, filters) { all, prefs, f ->
+            val (month, query, category, type) = f
             val needle = query.trim()
             val filtered = all.filter { expense ->
                 YearMonth.from(expense.date) == month &&
+                    (type == null || expense.type == type) &&
                     (category == null || expense.category == category) &&
                     (needle.isEmpty() || expense.note.contains(needle, ignoreCase = true) ||
                         expense.category.label.contains(needle, ignoreCase = true))
@@ -58,10 +68,14 @@ class HistoryViewModel(
                 month = month,
                 query = query,
                 category = category,
+                type = type,
                 groups = filtered.groupBy { it.date }
-                    .map { (date, items) -> DayGroup(date, items.sumOf { it.amount }, items) }
+                    .map { (date, items) ->
+                        DayGroup(date, items.filterNot { it.isIncome }.sumOf { it.amount }, items.filter { it.isIncome }.sumOf { it.amount }, items)
+                    }
                     .sortedByDescending { it.date },
-                total = filtered.sumOf { it.amount },
+                spent = filtered.filterNot { it.isIncome }.sumOf { it.amount },
+                received = filtered.filter { it.isIncome }.sumOf { it.amount },
                 count = filtered.size,
                 currency = prefs.currency,
             )
@@ -69,16 +83,17 @@ class HistoryViewModel(
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryUiState())
 
-    fun previousMonth() = month.update { it.minusMonths(1) }
+    fun previousMonth() = filters.update { it.copy(month = it.month.minusMonths(1)) }
 
-    fun nextMonth() = month.update { if (it < YearMonth.now()) it.plusMonths(1) else it }
+    fun nextMonth() = filters.update { if (it.month < YearMonth.now()) it.copy(month = it.month.plusMonths(1)) else it }
 
-    fun setQuery(value: String) {
-        query.value = value
-    }
+    fun setQuery(value: String) = filters.update { it.copy(query = value) }
 
-    fun setCategory(value: Category?) {
-        category.value = value
+    fun setCategory(value: Category?) = filters.update { it.copy(category = value) }
+
+    /** Spending only, income only, or both (null); clears a category that doesn't fit. */
+    fun setType(value: EntryType?) = filters.update {
+        it.copy(type = value, category = it.category?.takeIf { c -> value == null || c.type == value })
     }
 
     fun delete(expense: Expense) {

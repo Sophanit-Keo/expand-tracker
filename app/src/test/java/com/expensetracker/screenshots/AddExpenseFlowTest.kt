@@ -66,6 +66,22 @@ class AddExpenseFlowTest {
     }
 
     @Test
+    fun addIncomeIsStoredAsIncome() {
+        compose.onNode(hasTestTag("add_expense")).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("New expense"), timeoutMillis = 10_000)
+        compose.onNode(hasTestTag("type_income")).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("New income"), timeoutMillis = 10_000)
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("1500")
+        compose.onNodeWithText("Save income").performClick()
+        compose.waitUntilDoesNotExist(hasText("New income"), timeoutMillis = 10_000)
+
+        val saved = runBlocking { container.expenseRepository.getAll() }.single()
+        assertEquals(com.expensetracker.data.EntryType.INCOME, saved.type)
+        assertEquals(Category.SALARY, saved.category)
+        assertEquals(1500.0, saved.amount, 0.0)
+    }
+
+    @Test
     fun saveWithoutAmountShowsError() {
         compose.onNode(hasTestTag("add_expense")).performClick()
         compose.waitUntilAtLeastOneExists(hasText("New expense"), timeoutMillis = 10_000)

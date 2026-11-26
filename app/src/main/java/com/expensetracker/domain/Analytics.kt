@@ -71,6 +71,11 @@ data class PeriodSummary(
 }
 
 object Analytics {
+    /** Money out only; spending charts, budgets and category breakdowns never include income. */
+    fun spending(entries: List<Expense>): List<Expense> = entries.filterNot { it.isIncome }
+
+    fun income(entries: List<Expense>): List<Expense> = entries.filter { it.isIncome }
+
     fun total(expenses: Iterable<Expense>): Double = expenses.sumOf { it.amount }
 
     fun inRange(expenses: List<Expense>, start: LocalDate, end: LocalDate): List<Expense> =

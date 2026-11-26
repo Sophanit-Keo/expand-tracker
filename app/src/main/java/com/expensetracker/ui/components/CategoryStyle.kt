@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.CardGiftcard
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.Flight
@@ -13,6 +15,11 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LocalGroceryStore
 import androidx.compose.material.icons.rounded.MedicalServices
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.MoveToInbox
+import androidx.compose.material.icons.rounded.Paid
+import androidx.compose.material.icons.rounded.Redeem
+import androidx.compose.material.icons.rounded.Storefront
+import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.School
@@ -43,6 +50,13 @@ val Category.icon: ImageVector
         Category.TRAVEL -> Icons.Rounded.Flight
         Category.GIFTS -> Icons.Rounded.CardGiftcard
         Category.OTHER -> Icons.Rounded.MoreHoriz
+        Category.SALARY -> Icons.Rounded.Work
+        Category.BUSINESS -> Icons.Rounded.Storefront
+        Category.INVESTMENT -> Icons.AutoMirrored.Rounded.ShowChart
+        Category.REFUND -> Icons.AutoMirrored.Rounded.Undo
+        Category.GIFT_RECEIVED -> Icons.Rounded.Redeem
+        Category.TRANSFER_IN -> Icons.Rounded.MoveToInbox
+        Category.OTHER_INCOME -> Icons.Rounded.Paid
     }
 
 /**
@@ -63,6 +77,14 @@ private fun Category.hex(dark: Boolean): Long = when (this) {
     Category.EDUCATION -> if (dark) 0xFF1A9BBF else 0xFF0E7F9E
     Category.GIFTS -> if (dark) 0xFFC45BD6 else 0xFFA21CAF
     Category.OTHER -> if (dark) 0xFF8A929C else 0xFF7C8591
+    // Income sources are only charted against each other, so they reuse the validated order.
+    Category.SALARY -> if (dark) 0xFF0AAC23 else 0xFF008A17
+    Category.BUSINESS -> if (dark) 0xFF338CED else 0xFF257DE0
+    Category.INVESTMENT -> if (dark) 0xFF9887EF else 0xFF6A4CE2
+    Category.REFUND -> if (dark) 0xFF00A888 else 0xFF00B894
+    Category.GIFT_RECEIVED -> if (dark) 0xFFE24D8B else 0xFFEE7FAC
+    Category.TRANSFER_IN -> if (dark) 0xFFD28E05 else 0xFFF2A600
+    Category.OTHER_INCOME -> if (dark) 0xFF8A929C else 0xFF7C8591
 }
 
 fun Category.color(dark: Boolean): Color = Color(hex(dark))

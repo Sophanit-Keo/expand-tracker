@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.UploadFile
@@ -40,10 +42,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expensetracker.domain.CashFlowSummary
 import com.expensetracker.domain.CategoryTotal
 import com.expensetracker.ui.AppViewModelProvider
 import com.expensetracker.ui.charts.BarChart
@@ -55,6 +60,10 @@ import com.expensetracker.ui.components.RoundedProgressBar
 import com.expensetracker.ui.components.SectionCard
 import com.expensetracker.ui.components.StatTile
 import com.expensetracker.ui.components.color
+import com.expensetracker.ui.theme.CashInDark
+import com.expensetracker.ui.theme.CashInLight
+import com.expensetracker.ui.theme.CashOutDark
+import com.expensetracker.ui.theme.CashOutLight
 import com.expensetracker.ui.theme.LocalDarkTheme
 import com.expensetracker.ui.theme.heroBrush
 import com.expensetracker.ui.theme.onHero
@@ -73,10 +82,12 @@ fun HomeScreen(
     onOpenAnalytics: () -> Unit,
     onOpenSettings: () -> Unit,
     onImport: () -> Unit,
+    onAddIncome: () -> Unit,
+    onOpenCashFlow: () -> Unit,
     viewModel: HomeViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    HomeContent(state, onAddExpense, onOpenExpense, onSeeAll, onOpenAnalytics, onOpenSettings, onImport, viewModel::loadSampleData)
+    HomeContent(state, onAddExpense, onOpenExpense, onSeeAll, onOpenAnalytics, onOpenSettings, onImport, viewModel::loadSampleData, onAddIncome, onOpenCashFlow)
 }
 
 @Composable
@@ -89,6 +100,8 @@ fun HomeContent(
     onOpenSettings: () -> Unit,
     onImport: () -> Unit,
     onLoadSample: () -> Unit,
+    onAddIncome: () -> Unit = {},
+    onOpenCashFlow: () -> Unit = {},
 ) {
     val statusBar = WindowInsets.statusBars.asPaddingValues()
     LazyColumn(
@@ -156,6 +169,11 @@ fun HomeContent(
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+
+        item {
+            val cashFlow = state.cashFlow
+            if (cashFlow != null) CashFlowCard(cashFlow, state, onOpenCashFlow) else IncomePrompt(onAddIncome)
         }
 
         item {
@@ -300,6 +318,110 @@ private fun HeroCard(state: HomeUiState, onOpenSettings: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Text("Set a monthly budget", style = MaterialTheme.typography.labelLarge, color = onHero)
             }
+        }
+    }
+}
+
+@Composable
+private fun CashFlowCard(summary: CashFlowSummary, state: HomeUiState, onOpen: () -> Unit) {
+    val dark = LocalDarkTheme.current
+    val inColor = if (dark) CashInDark else CashInLight
+    val outColor = if (dark) CashOutDark else CashOutLight
+    SectionCard(
+        title = "Cash flow",
+        subtitle = state.monthName,
+        action = {
+            TextButton(onClick = onOpen, modifier = Modifier.testTag("open_cash_flow")) {
+                Text("Analysis")
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        },
+    ) {
+        Row {
+            CashFigure("In", "+" + formatMoney(summary.cashIn, state.currency), inColor, Modifier.weight(1f))
+            CashFigure("Out", "−" + formatMoney(summary.cashOut, state.currency), outColor, Modifier.weight(1f))
+            CashFigure(
+                if (summary.net >= 0) "Left" else "Short",
+                formatMoney(kotlin.math.abs(summary.net), state.currency),
+                null,
+                Modifier.weight(1f),
+            )
+        }
+        if (summary.cashIn > 0) {
+            val used = (summary.cashOut / summary.cashIn).toFloat()
+            Spacer(Modifier.height(14.dp))
+            RoundedProgressBar(progress = used, color = outColor, trackColor = inColor.copy(alpha = 0.25f))
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${(used * 100).roundToInt()}% of this month's income spent",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        summary.outlook?.let { outlook ->
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Savings, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (outlook.safeToSpendPerDay >= 0) {
+                        "Safe to spend ${formatMoney(outlook.safeToSpendPerDay, state.currency)} a day for the next ${outlook.remainingDays} ${if (outlook.remainingDays == 1) "day" else "days"}"
+                    } else {
+                        "Short by ${formatMoney(-outlook.safeToSpendPerDay * outlook.remainingDays, state.currency)} this month. Keep spending low."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CashFigure(label: String, value: String, swatch: Color?, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (swatch != null) {
+                Box(Modifier.size(8.dp).background(swatch, RoundedCornerShape(2.dp)))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun IncomePrompt(onAddIncome: () -> Unit) {
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Payments, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Track money coming in", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Add your salary or other income to see what's left and what's safe to spend.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onAddIncome) { Text("Add") }
         }
     }
 }

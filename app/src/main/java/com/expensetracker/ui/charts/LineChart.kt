@@ -1,6 +1,5 @@
 package com.expensetracker.ui.charts
 
-import com.expensetracker.ui.theme.card
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -30,14 +29,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.expensetracker.domain.ChartPoint
+import com.expensetracker.ui.theme.card
 import kotlin.math.abs
 
 /**
- * Single-series smoothed line with a light area wash, hairline gridlines, a labelled end point,
- * and a tap crosshair that snaps to the nearest point.
+ * Single-series smoothed line with a light area wash to the zero line, hairline gridlines, a
+ * labelled end point, and a tap crosshair that snaps to the nearest point. Handles negative values
+ * (e.g. a running net that dips below zero).
  */
 @Composable
 fun LineChart(
@@ -47,6 +49,7 @@ fun LineChart(
     modifier: Modifier = Modifier,
     height: Dp = 200.dp,
     lineColor: Color = MaterialTheme.colorScheme.primary,
+    tooltipLabel: (Int) -> String = { points[it].label },
 ) {
     val colors = MaterialTheme.colorScheme
     val surface = colors.card
@@ -63,12 +66,15 @@ fun LineChart(
         reveal.animateTo(1f, tween(durationMillis = 900, easing = FastOutSlowInEasing))
     }
 
-    val axisMax = niceAxisMax(points.maxOfOrNull { it.value } ?: 0.0)
-    val ticks = listOf(0.0, axisMax / 2, axisMax)
+    val maxValue = points.maxOfOrNull { it.value } ?: 0.0
+    val minValue = points.minOfOrNull { it.value } ?: 0.0
+    val axisMax = if (maxValue > 0) niceAxisMax(maxValue) else if (minValue < 0) 0.0 else 1.0
+    val axisMin = if (minValue < 0) -niceAxisMax(-minValue) else 0.0
+    val ticks = listOf(axisMin, 0.0, axisMax).distinct()
     val description = points.joinToString(prefix = "Line chart. ") { "${it.label}: ${valueFormatter(it.value)}" }
 
     // Geometry shared by drawing and hit-testing.
-    fun geometry(width: Float, heightPx: Float, density: androidx.compose.ui.unit.Density): LineGeometry = with(density) {
+    fun geometry(width: Float, heightPx: Float, density: Density): LineGeometry = with(density) {
         val widestTick = ticks.maxOf { textMeasurer.measure(axisFormatter(it), axisStyle).size.width }
         val labelHeight = textMeasurer.measure("0", axisStyle).size.height
         val left = widestTick + 12.dp.toPx() + 6.dp.toPx()
@@ -76,13 +82,15 @@ fun LineChart(
         val top = 36.dp.toPx()
         val bottom = heightPx - labelHeight - 10.dp.toPx()
         val stepX = if (points.size > 1) (right - left) / (points.size - 1) else 0f
+        fun y(v: Double) = bottom - ((v - axisMin) / (axisMax - axisMin)).toFloat() * (bottom - top)
         LineGeometry(
             left = left,
-            right = right,
             top = top,
             bottom = bottom,
+            zeroY = y(0.0),
             xs = points.indices.map { left + stepX * it },
-            ys = points.map { bottom - (it.value / axisMax).toFloat() * (bottom - top) },
+            ys = points.map { y(it.value) },
+            yOf = ::y,
         )
     }
 
@@ -103,7 +111,7 @@ fun LineChart(
         val g = geometry(size.width, size.height, this)
 
         ticks.forEach { tick ->
-            val y = g.bottom - (tick / axisMax).toFloat() * (g.bottom - g.top)
+            val y = g.yOf(tick)
             drawLine(
                 color = if (tick == 0.0) colors.outline.copy(alpha = 0.6f) else colors.outlineVariant.copy(alpha = 0.6f),
                 start = Offset(g.left - 6.dp.toPx(), y),
@@ -114,9 +122,12 @@ fun LineChart(
             drawText(label, topLeft = Offset(g.left - 6.dp.toPx() - label.size.width - 8.dp.toPx(), y - label.size.height / 2f))
         }
 
+        val step = labelStep(points.size)
         points.forEachIndexed { index, point ->
+            if (index % step != 0) return@forEachIndexed
             val label = textMeasurer.measure(point.label, axisStyle)
-            drawText(label, topLeft = Offset(g.xs[index] - label.size.width / 2f, g.bottom + 8.dp.toPx()))
+            val x = (g.xs[index] - label.size.width / 2f).coerceIn(0f, size.width - label.size.width)
+            drawText(label, topLeft = Offset(x, g.bottom + 8.dp.toPx()))
         }
 
         val line = Path().apply {
@@ -128,17 +139,18 @@ fun LineChart(
         }
         val area = Path().apply {
             addPath(line)
-            lineTo(g.xs.last(), g.bottom)
-            lineTo(g.xs.first(), g.bottom)
+            lineTo(g.xs.last(), g.zeroY)
+            lineTo(g.xs.first(), g.zeroY)
             close()
         }
 
         clipRect(right = g.left + (size.width - g.left) * reveal.value) {
-            drawPath(
-                area,
-                Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.14f), lineColor.copy(alpha = 0.02f)), startY = g.top, endY = g.bottom),
-            )
-            drawPath(line, lineColor, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(area, Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.14f), lineColor.copy(alpha = 0.04f)), startY = g.top, endY = g.bottom))
+            if (points.size == 1) {
+                drawCircle(lineColor, radius = 4.dp.toPx(), center = Offset(g.xs[0], g.ys[0]))
+            } else {
+                drawPath(line, lineColor, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
         }
 
         val focus = selected ?: points.lastIndex
@@ -155,9 +167,9 @@ fun LineChart(
             drawTooltip(
                 textMeasurer = textMeasurer,
                 value = valueFormatter(points[focus].value),
-                label = points[focus].label,
+                label = tooltipLabel(focus),
                 anchorX = g.xs[focus],
-                anchorY = g.ys[focus],
+                anchorY = minOf(g.ys[focus], g.zeroY),
                 minX = 0f,
                 background = colors.inverseSurface,
                 valueStyle = tooltipValueStyle,
@@ -166,7 +178,7 @@ fun LineChart(
         } else if (reveal.value >= 0.99f) {
             // Direct label on the end point only.
             val label = textMeasurer.measure(valueFormatter(points.last().value), endLabelStyle)
-            val x = (g.xs.last() - label.size.width / 2f).coerceAtMost(size.width - label.size.width)
+            val x = (g.xs.last() - label.size.width / 2f).coerceIn(g.left, size.width - label.size.width)
             drawText(label, topLeft = Offset(x, (g.ys.last() - label.size.height - 10.dp.toPx()).coerceAtLeast(0f)))
         }
     }
@@ -174,9 +186,10 @@ fun LineChart(
 
 private class LineGeometry(
     val left: Float,
-    val right: Float,
     val top: Float,
     val bottom: Float,
+    val zeroY: Float,
     val xs: List<Float>,
     val ys: List<Float>,
+    val yOf: (Double) -> Float,
 )

@@ -41,7 +41,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.expensetracker.data.EntryType
 import com.expensetracker.ui.analytics.AnalyticsScreen
+import com.expensetracker.ui.analytics.AnalyticsTab
+import com.expensetracker.ui.analytics.AnalyticsTabs
 import com.expensetracker.ui.edit.EditExpenseScreen
 import com.expensetracker.ui.history.HistoryScreen
 import com.expensetracker.ui.home.HomeScreen
@@ -53,9 +56,10 @@ object Routes {
     const val HISTORY = "history"
     const val ANALYTICS = "analytics"
     const val SETTINGS = "settings"
-    const val EDIT = "edit?id={id}"
+    const val EDIT = "edit?id={id}&type={type}"
     const val IMPORT = "import"
     fun edit(id: Long? = null) = if (id == null) "edit" else "edit?id=$id"
+    fun addIncome() = "edit?type=${EntryType.INCOME.name}"
 }
 
 private enum class TopLevel(val route: String, val label: String, val selectedIcon: ImageVector, val icon: ImageVector) {
@@ -125,6 +129,11 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                     onOpenAnalytics = { navController.navigateTopLevel(Routes.ANALYTICS) },
                     onOpenSettings = { navController.navigateTopLevel(Routes.SETTINGS) },
                     onImport = { navController.navigate(Routes.IMPORT) },
+                    onAddIncome = { navController.navigate(Routes.addIncome()) },
+                    onOpenCashFlow = {
+                        AnalyticsTabs.selected.value = AnalyticsTab.CASH_FLOW
+                        navController.navigateTopLevel(Routes.ANALYTICS)
+                    },
                 )
             }
             composable(Routes.HISTORY) {
@@ -134,14 +143,20 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                 )
             }
             composable(Routes.ANALYTICS) {
-                AnalyticsScreen()
+                AnalyticsScreen(
+                    onAddIncome = { navController.navigate(Routes.addIncome()) },
+                    onImport = { navController.navigate(Routes.IMPORT) },
+                )
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(onImport = { navController.navigate(Routes.IMPORT) })
             }
             composable(
                 route = Routes.EDIT,
-                arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = -1L }),
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType; defaultValue = -1L },
+                    navArgument("type") { type = NavType.StringType; defaultValue = EntryType.EXPENSE.name },
+                ),
                 enterTransition = { slideInVertically { it / 3 } + fadeIn() },
                 exitTransition = { fadeOut() },
                 popExitTransition = { slideOutVertically { it / 3 } + fadeOut() },

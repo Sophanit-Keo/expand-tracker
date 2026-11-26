@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -36,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,21 +84,41 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnalyticsScreen(viewModel: AnalyticsViewModel = viewModel(factory = AppViewModelProvider.Factory)) {
+fun AnalyticsScreen(
+    onAddIncome: () -> Unit,
+    onImport: () -> Unit,
+    viewModel: AnalyticsViewModel = viewModel(factory = AppViewModelProvider.Factory),
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text("Analytics") },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(
+            Column {
+                TopAppBar(
+                    title = { Text("Analytics") },
+                    scrollBehavior = scrollBehavior,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                )
+                PrimaryTabRow(
+                    selectedTabIndex = state.tab.ordinal,
                     containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
-            )
+                ) {
+                    AnalyticsTab.entries.forEach { tab ->
+                        Tab(
+                            selected = state.tab == tab,
+                            onClick = { viewModel.setTab(tab) },
+                            text = { Text(tab.label, style = MaterialTheme.typography.titleSmall) },
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("tab_${tab.name.lowercase()}"),
+                        )
+                    }
+                }
+            }
         },
     ) { padding ->
         AnalyticsContent(
@@ -101,12 +126,14 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel = viewModel(factory = AppViewM
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = padding.calculateTopPadding(),
+                top = padding.calculateTopPadding() + 12.dp,
                 bottom = padding.calculateBottomPadding() + 24.dp,
             ),
             onTypeChange = viewModel::setType,
             onPrevious = viewModel::previous,
             onNext = viewModel::next,
+            onAddIncome = onAddIncome,
+            onImport = onImport,
         )
     }
 }
@@ -118,9 +145,15 @@ fun AnalyticsContent(
     onTypeChange: (PeriodType) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onAddIncome: () -> Unit = {},
+    onImport: () -> Unit = {},
 ) {
     val summary = state.summary
+    val listState = rememberLazyListState()
+    // A different tab is a different page: start it from the top.
+    LaunchedEffect(state.tab) { listState.scrollToItem(0) }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -141,6 +174,10 @@ fun AnalyticsContent(
         }
 
         if (summary == null) return@LazyColumn
+        if (state.tab == AnalyticsTab.CASH_FLOW) {
+            cashFlowItems(state, onAddIncome, onImport)
+            return@LazyColumn
+        }
 
         item { SummaryCard(summary, state) }
 
@@ -379,26 +416,6 @@ private fun InsightsCard(summary: PeriodSummary, state: AnalyticsUiState) {
                 "No data for the ${state.comparedTo}",
                 "Keep tracking to unlock comparisons",
             )
-        }
-    }
-}
-
-@Composable
-private fun InsightRow(icon: ImageVector, tint: Color, title: String, detail: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(tint.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

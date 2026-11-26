@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
+import com.expensetracker.data.EntryType
 import com.expensetracker.data.Expense
 import com.expensetracker.data.ExpenseRepository
 import com.expensetracker.data.SettingsRepository
@@ -35,7 +36,7 @@ enum class ImportStep { PICK, READING, PASSWORD, MAP, REVIEW, IMPORTING, DONE, E
 enum class RowFlag(val label: String) {
     ALREADY_IMPORTED("Already imported"),
     POSSIBLE_DUPLICATE("Possible duplicate of an expense you added"),
-    MONEY_IN("Money in"),
+    MONEY_IN("Money in · added as income"),
     CHECK_DIRECTION("Check: money in or out?"),
 }
 
@@ -45,6 +46,7 @@ data class ImportRow(
     val description: String,
     val amount: Double,
     val direction: Direction,
+    val type: EntryType,
     val category: Category,
     val selected: Boolean,
     val flag: RowFlag?,
@@ -67,16 +69,19 @@ data class ImportUiState(
     val mappingAutoDetected: Boolean = false,
     // Review.
     val rows: List<ImportRow> = emptyList(),
-    val showMoneyIn: Boolean = false,
     val pdfUsedColumns: Boolean = false,
     // Result.
     val importedCount: Int = 0,
-    val importedTotal: Double = 0.0,
+    val importedOut: Double = 0.0,
+    val importedIn: Double = 0.0,
 ) {
-    val visibleRows: List<ImportRow> get() = if (showMoneyIn) rows else rows.filter { it.direction != Direction.IN }
+    val visibleRows: List<ImportRow> get() = rows
     val selectedRows: List<ImportRow> get() = rows.filter { it.selected }
-    val selectedTotal: Double get() = selectedRows.sumOf { it.amount }
-    val moneyInCount: Int get() = rows.count { it.direction == Direction.IN }
+    val selectedOut: Double get() = selectedRows.filter { it.type == EntryType.EXPENSE }.sumOf { it.amount }
+    val selectedIn: Double get() = selectedRows.filter { it.type == EntryType.INCOME }.sumOf { it.amount }
+    val moneyInCount: Int get() = rows.count { it.type == EntryType.INCOME }
+    private val selectableIncome get() = rows.filter { it.type == EntryType.INCOME && it.flag != RowFlag.ALREADY_IMPORTED }
+    val moneyInSelected: Boolean get() = selectableIncome.isNotEmpty() && selectableIncome.all { it.selected }
     val skippedDuplicates: Int get() = rows.count { it.flag == RowFlag.ALREADY_IMPORTED || it.flag == RowFlag.POSSIBLE_DUPLICATE }
     val uncertainCount: Int get() = rows.count { it.flag == RowFlag.CHECK_DIRECTION }
 }
@@ -200,7 +205,7 @@ class ImportViewModel(
         val existingKeys = expenses.importKeys()
         val rules = expenses.categoryRules() + learned
         val manual = expenses.getAll().filter { it.importKey == null }
-            .groupBy { it.date to (it.amount * 100).roundToLong() }
+            .groupBy { Triple(it.type, it.date, (it.amount * 100).roundToLong()) }
             .mapValues { it.value.size }
             .toMutableMap()
 
@@ -210,17 +215,20 @@ class ImportViewModel(
                 val description = CategoryGuesser.cleanDescription(tx.description).ifBlank { "Bank transaction" }
                 val merchant = CategoryGuesser.merchantKey(tx.description)
                 val base = CategoryGuesser.importKey(tx.date, tx.amount, tx.description, 0)
-                val occurrence = occurrences.merge(base, 1, Int::plus)!! - 1
-                val importKey = CategoryGuesser.importKey(tx.date, tx.amount, tx.description, occurrence)
+                val type = if (tx.direction == Direction.IN) EntryType.INCOME else EntryType.EXPENSE
+                // Money in gets its own key suffix; money-out keys stay as in earlier versions.
+                val suffix = if (type == EntryType.INCOME) "|in" else ""
+                val occurrence = occurrences.merge(base + suffix, 1, Int::plus)!! - 1
+                val importKey = CategoryGuesser.importKey(tx.date, tx.amount, tx.description, occurrence) + suffix
 
-                val manualKey = tx.date to (tx.amount * 100).roundToLong()
+                val manualKey = Triple(type, tx.date, (tx.amount * 100).roundToLong())
                 val flag = when {
                     importKey in existingKeys -> RowFlag.ALREADY_IMPORTED
-                    tx.direction == Direction.IN -> RowFlag.MONEY_IN
                     (manual[manualKey] ?: 0) > 0 -> {
                         manual[manualKey] = manual.getValue(manualKey) - 1
                         RowFlag.POSSIBLE_DUPLICATE
                     }
+                    tx.direction == Direction.IN -> RowFlag.MONEY_IN
                     tx.direction == Direction.UNKNOWN -> RowFlag.CHECK_DIRECTION
                     else -> null
                 }
@@ -230,17 +238,18 @@ class ImportViewModel(
                     description = description,
                     amount = abs(tx.amount),
                     direction = tx.direction,
-                    category = rules[merchant]?.takeIf { merchant.isNotEmpty() }
-                        ?: CategoryGuesser.guess(tx.description)
-                        ?: Category.OTHER,
-                    selected = tx.direction != Direction.IN && flag != RowFlag.ALREADY_IMPORTED && flag != RowFlag.POSSIBLE_DUPLICATE,
+                    type = type,
+                    category = rules[merchant]?.takeIf { merchant.isNotEmpty() && it.type == type }
+                        ?: if (type == EntryType.INCOME) CategoryGuesser.guessIncome(tx.description)
+                        else CategoryGuesser.guess(tx.description) ?: Category.OTHER,
+                    selected = flag != RowFlag.ALREADY_IMPORTED && flag != RowFlag.POSSIBLE_DUPLICATE,
                     flag = flag,
                     merchantKey = merchant,
                     importKey = importKey,
                 )
             }.sortedByDescending { it.date }
         }
-        _state.update { it.copy(step = ImportStep.REVIEW, rows = rows, showMoneyIn = false) }
+        _state.update { it.copy(step = ImportStep.REVIEW, rows = rows) }
     }
 
     fun toggleRow(id: Int) = _state.update { s ->
@@ -252,23 +261,28 @@ class ImportViewModel(
         s.copy(rows = s.rows.map { if (it.id in visible && it.flag != RowFlag.ALREADY_IMPORTED) it.copy(selected = selected) else it })
     }
 
-    fun setShowMoneyIn(show: Boolean) = _state.update { it.copy(showMoneyIn = show) }
+    /** Tick or untick every money-in row (imported as income). */
+    fun setMoneyInSelected(selected: Boolean) = _state.update { s ->
+        s.copy(rows = s.rows.map { if (it.type == EntryType.INCOME && it.flag != RowFlag.ALREADY_IMPORTED) it.copy(selected = selected) else it })
+    }
 
     /** Sets the category for this row and every row from the same merchant, and remembers it. */
     fun setCategory(rowId: Int, category: Category) = _state.update { s ->
-        val merchant = s.rows.firstOrNull { it.id == rowId }?.merchantKey.orEmpty()
+        val row = s.rows.firstOrNull { it.id == rowId }
+        val merchant = row?.merchantKey.orEmpty()
         if (merchant.isNotEmpty()) learned[merchant] = category
         s.copy(
             rows = s.rows.map {
-                if (it.id == rowId || (merchant.isNotEmpty() && it.merchantKey == merchant)) it.copy(category = category) else it
+                val sameMerchant = merchant.isNotEmpty() && it.merchantKey == merchant && it.type == row?.type
+                if (it.id == rowId || sameMerchant) it.copy(category = category) else it
             },
         )
     }
 
     fun similarCount(rowId: Int): Int {
         val rows = _state.value.rows
-        val merchant = rows.firstOrNull { it.id == rowId }?.merchantKey.orEmpty()
-        return if (merchant.isEmpty()) 0 else rows.count { it.merchantKey == merchant && it.id != rowId }
+        val row = rows.firstOrNull { it.id == rowId } ?: return 0
+        return if (row.merchantKey.isEmpty()) 0 else rows.count { it.merchantKey == row.merchantKey && it.type == row.type && it.id != rowId }
     }
 
     fun import() {
@@ -281,6 +295,7 @@ class ImportViewModel(
                 Expense(
                     amount = row.amount,
                     category = row.category,
+                    type = row.category.type,
                     note = row.description,
                     date = row.date,
                     createdAt = createdAt++,
@@ -290,7 +305,12 @@ class ImportViewModel(
             expenses.addAll(newExpenses)
             if (learned.isNotEmpty()) expenses.saveCategoryRules(learned.toMap())
             _state.update {
-                it.copy(step = ImportStep.DONE, importedCount = newExpenses.size, importedTotal = newExpenses.sumOf { e -> e.amount })
+                it.copy(
+                    step = ImportStep.DONE,
+                    importedCount = newExpenses.size,
+                    importedOut = newExpenses.filterNot { e -> e.isIncome }.sumOf { e -> e.amount },
+                    importedIn = newExpenses.filter { e -> e.isIncome }.sumOf { e -> e.amount },
+                )
             }
         }
     }

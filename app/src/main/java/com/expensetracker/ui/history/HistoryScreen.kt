@@ -30,6 +30,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -59,12 +62,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
+import com.expensetracker.data.EntryType
 import com.expensetracker.data.Expense
 import com.expensetracker.ui.AppViewModelProvider
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.ExpenseRow
 import com.expensetracker.ui.components.PeriodNavigator
 import com.expensetracker.ui.components.icon
+import com.expensetracker.ui.theme.CashInText
 import com.expensetracker.util.formatMoney
 import com.expensetracker.util.friendlyDate
 import kotlinx.coroutines.launch
@@ -120,7 +125,11 @@ fun HistoryScreen(
                     canGoNext = state.canGoNext,
                 )
                 Text(
-                    "${formatMoney(state.total, state.currency)} · ${state.count} ${if (state.count == 1) "transaction" else "transactions"}",
+                    buildList {
+                        if (state.spent > 0 || state.received == 0.0) add("−${formatMoney(state.spent, state.currency)} out")
+                        if (state.received > 0) add("+${formatMoney(state.received, state.currency)} in")
+                        add("${state.count} ${if (state.count == 1) "transaction" else "transactions"}")
+                    }.joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -131,7 +140,9 @@ fun HistoryScreen(
                 Spacer(Modifier.height(12.dp))
             }
             item {
-                CategoryFilters(state.category, viewModel::setCategory)
+                TypeFilter(state.type, viewModel::setType)
+                Spacer(Modifier.height(8.dp))
+                CategoryFilters(state.category, state.type, viewModel::setCategory)
                 Spacer(Modifier.height(8.dp))
             }
 
@@ -159,11 +170,21 @@ fun HistoryScreen(
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier.weight(1f),
                         )
-                        Text(
-                            formatMoney(group.total, state.currency),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (group.received > 0) {
+                            Text(
+                                "+" + formatMoney(group.received, state.currency),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = CashInText,
+                            )
+                        }
+                        if (group.received > 0 && group.spent > 0) Spacer(Modifier.size(10.dp))
+                        if (group.spent > 0) {
+                            Text(
+                                "−" + formatMoney(group.spent, state.currency),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
                 group.items.forEachIndexed { index, expense ->
@@ -233,7 +254,21 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
-private fun CategoryFilters(selected: Category?, onSelect: (Category?) -> Unit) {
+private fun TypeFilter(selected: EntryType?, onSelect: (EntryType?) -> Unit) {
+    val options = listOf(null to "All", EntryType.EXPENSE to "Spending", EntryType.INCOME to "Income")
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, (type, label) ->
+            SegmentedButton(
+                selected = selected == type,
+                onClick = { onSelect(type) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+            ) { Text(label) }
+        }
+    }
+}
+
+@Composable
+private fun CategoryFilters(selected: Category?, type: EntryType?, onSelect: (Category?) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             FilterChip(
@@ -243,7 +278,7 @@ private fun CategoryFilters(selected: Category?, onSelect: (Category?) -> Unit) 
                 shape = CircleShape,
             )
         }
-        items(Category.entries) { category ->
+        items(if (type == null) Category.entries else Category.of(type)) { category ->
             FilterChip(
                 selected = selected == category,
                 onClick = { onSelect(if (selected == category) null else category) },

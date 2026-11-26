@@ -30,6 +30,21 @@ object CategoryGuesser {
         """^(?i)(debit card purchase|card purchase|pos purchase|online purchase|e-?com(merce)? purchase|purchase at|purchase|pos|payment to|paid to)\b[\s:-]*""",
     )
 
+    private val incomeRules: List<Pair<Category, List<String>>> = listOf(
+        Category.SALARY to listOf("salary", "payroll", "wage", "wages", "pay slip", "payslip", "allowance", "bonus"),
+        Category.INVESTMENT to listOf("interest", "dividend", "investment", "coupon", "yield"),
+        Category.REFUND to listOf("refund", "reversal", "cashback", "cash back", "chargeback", "return"),
+        Category.BUSINESS to listOf("invoice", "freelance", "client", "sales", "upwork", "fiverr", "payout"),
+        Category.GIFT_RECEIVED to listOf("gift", "birthday", "wedding"),
+        Category.TRANSFER_IN to listOf("transfer", "trf", "received from", "from", "deposit", "cash in", "khqr", "top up"),
+    )
+
+    /** Category for money coming in; falls back to "Other income". */
+    fun guessIncome(description: String): Category {
+        val text = " " + description.lowercase(Locale.ROOT) + " "
+        return incomeRules.firstOrNull { (_, words) -> words.any { w -> matches(text, w) } }?.first ?: Category.OTHER_INCOME
+    }
+
     fun guess(description: String): Category? {
         val text = " " + description.lowercase(Locale.ROOT) + " "
         return rules.firstOrNull { (_, words) -> words.any { w -> matches(text, w) } }?.first

@@ -43,6 +43,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -65,6 +68,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -75,6 +79,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.expensetracker.data.Category
+import com.expensetracker.data.EntryType
 import com.expensetracker.ui.AppViewModelProvider
 import com.expensetracker.ui.components.color
 import com.expensetracker.ui.components.icon
@@ -103,7 +108,10 @@ fun EditExpenseScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (state.isEditing) "Edit expense" else "New expense") },
+                title = {
+                    val noun = if (state.type == EntryType.INCOME) "income" else "expense"
+                    Text(if (state.isEditing) "Edit $noun" else "New $noun")
+                },
                 navigationIcon = {
                     IconButton(onClick = onDone) { Icon(Icons.Rounded.Close, contentDescription = "Close") }
                 },
@@ -129,7 +137,14 @@ fun EditExpenseScreen(
                         .height(56.dp),
                     enabled = !state.loading,
                 ) {
-                    Text(if (state.isEditing) "Save changes" else "Save expense", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        when {
+                            state.isEditing -> "Save changes"
+                            state.type == EntryType.INCOME -> "Save income"
+                            else -> "Save expense"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                 }
             }
         },
@@ -141,6 +156,16 @@ fun EditExpenseScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
+                listOf(EntryType.EXPENSE to "Expense", EntryType.INCOME to "Income").forEachIndexed { index, (type, label) ->
+                    SegmentedButton(
+                        selected = state.type == type,
+                        onClick = { viewModel.onTypeChange(type) },
+                        shape = SegmentedButtonDefaults.itemShape(index, 2),
+                        modifier = Modifier.testTag("type_${type.name.lowercase()}"),
+                    ) { Text(label) }
+                }
+            }
             AmountInput(
                 text = state.amountText,
                 symbol = state.currency.symbol,
@@ -154,7 +179,7 @@ fun EditExpenseScreen(
             Spacer(Modifier.height(24.dp))
             Text("Category", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(12.dp))
-            CategoryGrid(selected = state.category, onSelect = {
+            CategoryGrid(categories = Category.of(state.type), selected = state.category, onSelect = {
                 focusManager.clearFocus()
                 viewModel.onCategoryChange(it)
             })
@@ -288,9 +313,9 @@ private fun AmountInput(
 }
 
 @Composable
-private fun CategoryGrid(selected: Category, onSelect: (Category) -> Unit) {
+private fun CategoryGrid(categories: List<Category>, selected: Category, onSelect: (Category) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Category.entries.chunked(4).forEach { row ->
+        categories.chunked(4).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { category ->
                     CategoryTile(category, category == selected, { onSelect(category) }, Modifier.weight(1f))

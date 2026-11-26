@@ -137,6 +137,35 @@ class ImporterIntegrationTest {
         assertTrue((content as StatementContent.Unsupported).message.contains(".xlsx"))
     }
 
+    /** The version-2 database (statement import release) upgrades to v3 with every entry an expense. */
+    @Test
+    fun upgradeFromVersion2AddsEntryType() = runBlocking {
+        val name = "upgrade-v2-test.db"
+        context.deleteDatabase(name)
+        SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(name).apply { parentFile?.mkdirs() }, null).use { db ->
+            db.execSQL("CREATE TABLE IF NOT EXISTS `expenses` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `amount` REAL NOT NULL, `category` TEXT NOT NULL, `note` TEXT NOT NULL, `date` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `importKey` TEXT)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `category_rules` (`merchant` TEXT NOT NULL, `category` TEXT NOT NULL, PRIMARY KEY(`merchant`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_expenses_date` ON `expenses` (`date`)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)")
+            db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a308b27493658d451218a5dcaf7264be')")
+            db.execSQL("INSERT INTO expenses (amount, category, note, date, createdAt, importKey) VALUES (5.75, 'FOOD', 'Starbucks', ${LocalDate.of(2026, 11, 3).toEpochDay()}, 1, '2026-11-03|575|starbucks|0')")
+            db.execSQL("INSERT INTO category_rules (merchant, category) VALUES ('starbucks', 'FOOD')")
+            db.version = 2
+        }
+        val database = AppDatabase.build(context, name)
+        try {
+            val entry = database.expenseDao().getAll().single()
+            assertEquals(com.expensetracker.data.EntryType.EXPENSE, entry.type)
+            assertEquals("2026-11-03|575|starbucks|0", entry.importKey)
+            assertEquals(1, database.categoryRuleDao().getAll().size)
+            database.expenseDao().upsert(com.expensetracker.data.Expense(amount = 1500.0, category = Category.SALARY, date = LocalDate.of(2026, 11, 25)))
+            assertEquals(com.expensetracker.data.EntryType.INCOME, database.expenseDao().getAll().first { it.amount == 1500.0 }.type)
+        } finally {
+            database.close()
+            context.deleteDatabase(name)
+        }
+    }
+
     /** Recreates the exact version-1 database the first release shipped, then upgrades it. */
     @Test
     fun upgradeFromVersion1KeepsExpenses() = runBlocking {
@@ -158,6 +187,7 @@ class ImporterIntegrationTest {
             assertEquals("Lunch", all.single().note)
             assertEquals(Category.FOOD, all.single().category)
             assertNull(all.single().importKey)
+            assertEquals(com.expensetracker.data.EntryType.EXPENSE, all.single().type)
             database.categoryRuleDao().upsert(listOf(CategoryRule("starbucks", Category.FOOD)))
             assertEquals(Category.FOOD, database.categoryRuleDao().getAll().single().category)
         } finally {

@@ -48,9 +48,10 @@ class SettingsViewModel(
 
     companion object {
         fun buildCsv(items: List<Expense>): String = buildString {
-            appendLine("date,category,amount,note")
+            appendLine("date,type,category,amount,note")
             items.forEach { e ->
                 append(e.date).append(',')
+                append(if (e.isIncome) "income" else "expense").append(',')
                 append(csvField(e.category.label)).append(',')
                 append(e.amount).append(',')
                 appendLine(csvField(e.note))

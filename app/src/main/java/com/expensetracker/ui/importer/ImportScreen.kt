@@ -154,8 +154,8 @@ fun ImportScreen(
         bottomBar = {
             when (state.step) {
                 ImportStep.REVIEW -> BottomAction(
-                    text = if (state.selectedRows.isEmpty()) "Select expenses to import"
-                    else "Import ${state.selectedRows.size} ${if (state.selectedRows.size == 1) "expense" else "expenses"} · ${formatMoney(state.selectedTotal, state.currency)}",
+                    text = if (state.selectedRows.isEmpty()) "Select transactions to import"
+                    else "Import ${state.selectedRows.size} ${if (state.selectedRows.size == 1) "transaction" else "transactions"}",
                     enabled = state.selectedRows.isNotEmpty(),
                     onClick = viewModel::import,
                     tag = "import_confirm",
@@ -184,7 +184,7 @@ fun ImportScreen(
                     state = state,
                     onToggle = viewModel::toggleRow,
                     onSelectAll = viewModel::selectAllVisible,
-                    onShowMoneyIn = viewModel::setShowMoneyIn,
+                    onMoneyInSelected = viewModel::setMoneyInSelected,
                     onPickCategory = { categoryRowId = it },
                 )
                 ImportStep.DONE -> DoneStep(state, onViewHistory, onClose)
@@ -197,6 +197,7 @@ fun ImportScreen(
         val row = state.rows.firstOrNull { it.id == rowId }
         if (row != null) {
             CategorySheet(
+                categories = Category.of(row.type),
                 description = row.description,
                 selected = row.category,
                 similar = viewModel.similarCount(rowId),
@@ -262,7 +263,7 @@ private fun PickStep(onPick: () -> Unit) {
         SectionCard(title = "How it works") {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 HowStep(1, "Choose your statement", "CSV and Excel files work best. PDFs work when they contain text (not a scan).")
-                HowStep(2, "Review", "Spending is selected for you, with a suggested category. Money coming in is left out.")
+                HowStep(2, "Review", "Spending and money coming in are selected for you, each with a suggested category.")
                 HowStep(3, "Import", "Transactions you've already imported are skipped, so importing the same file twice is safe.")
             }
         }
@@ -406,13 +407,16 @@ private fun DoneStep(state: ImportUiState, onViewHistory: () -> Unit, onClose: (
         IconBubble(Icons.Rounded.CheckCircle, size = 104, tint = Color.White, background = Decrease)
         Spacer(Modifier.height(24.dp))
         Text(
-            "Imported ${state.importedCount} ${if (state.importedCount == 1) "expense" else "expenses"}",
+            "Imported ${state.importedCount} ${if (state.importedCount == 1) "transaction" else "transactions"}",
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "${formatMoney(state.importedTotal, state.currency)} added to your history. Your charts and budget are up to date.",
+            buildList {
+                if (state.importedOut > 0) add("−${formatMoney(state.importedOut, state.currency)} spending")
+                if (state.importedIn > 0) add("+${formatMoney(state.importedIn, state.currency)} income")
+            }.joinToString(" and ") + " added. Your charts, budget and cash flow are up to date.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -582,7 +586,7 @@ private fun ReviewStep(
     state: ImportUiState,
     onToggle: (Int) -> Unit,
     onSelectAll: (Boolean) -> Unit,
-    onShowMoneyIn: (Boolean) -> Unit,
+    onMoneyInSelected: (Boolean) -> Unit,
     onPickCategory: (Int) -> Unit,
 ) {
     val visible = state.visibleRows
@@ -593,9 +597,10 @@ private fun ReviewStep(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (state.moneyInCount > 0) {
                     FilterChip(
-                        selected = state.showMoneyIn,
-                        onClick = { onShowMoneyIn(!state.showMoneyIn) },
-                        label = { Text("Show money in (${state.moneyInCount})") },
+                        selected = state.moneyInSelected,
+                        onClick = { onMoneyInSelected(!state.moneyInSelected) },
+                        label = { Text("Include money in (${state.moneyInCount})") },
+                        modifier = Modifier.testTag("include_money_in"),
                         shape = CircleShape,
                     )
                 }
@@ -647,8 +652,16 @@ private fun SummaryCard(state: ImportUiState) {
             }
         }
         val notes = buildList {
+            if (state.selectedOut > 0 || state.selectedIn > 0) {
+                add(
+                    "Selected: " + buildList {
+                        if (state.selectedOut > 0) add("−${formatMoney(state.selectedOut, state.currency)} spending")
+                        if (state.selectedIn > 0) add("+${formatMoney(state.selectedIn, state.currency)} income")
+                    }.joinToString(", ") + ".",
+                )
+            }
             state.moneyInCount.takeIf { it > 0 }?.let { n ->
-                add(if (n == 1) "1 money-in transaction (salary, transfer in…) is hidden and won't be imported." else "$n money-in transactions (salary, transfers in…) are hidden and won't be imported.")
+                add(if (n == 1) "1 money-in transaction (salary, transfer in…) will be added as income for your cash flow." else "$n money-in transactions (salary, transfers in…) will be added as income for your cash flow.")
             }
             state.skippedDuplicates.takeIf { it > 0 }?.let { n ->
                 add(if (n == 1) "1 looks like a duplicate and is unticked." else "$n look like duplicates and are unticked.")
@@ -736,7 +749,7 @@ private fun CategoryPill(category: Category, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategorySheet(description: String, selected: Category, similar: Int, onSelect: (Category) -> Unit, onDismiss: () -> Unit) {
+private fun CategorySheet(categories: List<Category>, description: String, selected: Category, similar: Int, onSelect: (Category) -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
             Text("Category for “$description”", style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -748,7 +761,7 @@ private fun CategorySheet(description: String, selected: Category, similar: Int,
             )
             Spacer(Modifier.height(16.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Category.entries.chunked(4).forEach { rowItems ->
+                categories.chunked(4).forEach { rowItems ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         rowItems.forEach { category ->
                             val isSelected = category == selected

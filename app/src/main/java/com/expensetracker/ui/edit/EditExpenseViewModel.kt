@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
+import com.expensetracker.data.EntryType
 import com.expensetracker.data.Expense
 import com.expensetracker.data.ExpenseRepository
 import com.expensetracker.data.SettingsRepository
@@ -20,6 +21,7 @@ import java.time.LocalDate
 
 data class EditUiState(
     val isEditing: Boolean = false,
+    val type: EntryType = EntryType.EXPENSE,
     val loading: Boolean = true,
     val currency: AppCurrency = AppCurrency.USD,
     val amountText: String = "",
@@ -38,9 +40,13 @@ class EditExpenseViewModel(
     private val settings: SettingsRepository,
 ) : ViewModel() {
     private val expenseId: Long? = savedStateHandle.get<Long>("id")?.takeIf { it > 0 }
+    private val requestedType: EntryType =
+        EntryType.entries.firstOrNull { it.name == savedStateHandle.get<String>("type") } ?: EntryType.EXPENSE
     private var original: Expense? = null
 
-    private val _state = MutableStateFlow(EditUiState(isEditing = expenseId != null))
+    private val _state = MutableStateFlow(
+        EditUiState(isEditing = expenseId != null, type = requestedType, category = Category.default(requestedType)),
+    )
     val state: StateFlow<EditUiState> = _state.asStateFlow()
 
     init {
@@ -54,6 +60,7 @@ class EditExpenseViewModel(
                         loading = false,
                         currency = currency,
                         amountText = amountToInput(existing.amount),
+                        type = existing.type,
                         category = existing.category,
                         date = existing.date,
                         note = existing.note,
@@ -71,6 +78,10 @@ class EditExpenseViewModel(
 
     fun onCategoryChange(category: Category) = _state.update { it.copy(category = category) }
 
+    fun onTypeChange(type: EntryType) = _state.update {
+        if (it.type == type) it else it.copy(type = type, category = Category.default(type))
+    }
+
     fun onDateChange(date: LocalDate) = _state.update { it.copy(date = date) }
 
     fun onNoteChange(note: String) = _state.update { it.copy(note = note.take(80)) }
@@ -86,6 +97,7 @@ class EditExpenseViewModel(
             val expense = (original ?: Expense(amount = amount, category = current.category, date = current.date)).copy(
                 amount = amount,
                 category = current.category,
+                type = current.category.type,
                 date = current.date,
                 note = current.note.trim(),
             )

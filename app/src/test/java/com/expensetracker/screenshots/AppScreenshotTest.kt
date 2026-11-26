@@ -14,6 +14,8 @@ import com.expensetracker.ExpenseApp
 import com.expensetracker.MainActivity
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.SampleData
+import com.expensetracker.ui.analytics.AnalyticsTab
+import com.expensetracker.ui.analytics.AnalyticsTabs
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -37,6 +39,7 @@ abstract class AppScreenshotTest(private val suffix: String) {
 
     @Before
     fun seed() {
+        AnalyticsTabs.selected.value = AnalyticsTab.SPENDING
         val container = ApplicationProvider.getApplicationContext<ExpenseApp>().container
         runBlocking {
             container.expenseRepository.clear()
@@ -63,7 +66,7 @@ abstract class AppScreenshotTest(private val suffix: String) {
 
     @Test
     fun allScreens() {
-        compose.waitUntilAtLeastOneExists(hasText("Last 7 days"), timeoutMillis = 10_000)
+        compose.waitUntilAtLeastOneExists(hasText("Spent in", substring = true), timeoutMillis = 10_000)
         shoot("1_home")
         scrollTo("Recent transactions")
         shoot("1b_home_scrolled")
@@ -75,12 +78,25 @@ abstract class AppScreenshotTest(private val suffix: String) {
         scrollTo("Insights")
         shoot("2c_analytics_insights")
 
+        compose.onNode(hasTestTag("tab_cash_flow")).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Smart insights"), timeoutMillis = 10_000)
+        shoot("9_cash_flow")
+        scrollTo("Cash in vs cash out")
+        shoot("9b_cash_flow_charts")
+        scrollTo("Where your money comes from")
+        shoot("9c_cash_flow_recurring")
+        scrollTo("Last 6 months")
+        shoot("9d_cash_flow_months")
+
         open("history", "Search notes or categories")
         shoot("3_history")
 
         compose.onNode(hasTestTag("add_expense")).performClick()
         compose.waitUntilAtLeastOneExists(hasText("New expense"), timeoutMillis = 10_000)
         shoot("4_add_expense")
+        compose.onNode(hasTestTag("type_income")).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("New income"), timeoutMillis = 10_000)
+        shoot("4b_add_income")
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.waitUntilAtLeastOneExists(hasTestTag("nav_settings"), timeoutMillis = 10_000)
 

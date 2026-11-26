@@ -6,6 +6,8 @@ import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.ExpenseRepository
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.domain.Analytics
+import com.expensetracker.domain.CashFlow
+import com.expensetracker.domain.CashFlowSummary
 import com.expensetracker.domain.ChartPoint
 import com.expensetracker.domain.Period
 import com.expensetracker.domain.PeriodSummary
@@ -22,8 +24,17 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
+enum class AnalyticsTab(val label: String) { SPENDING("Spending"), CASH_FLOW("Cash flow") }
+
+/** Selected tab, shared so other screens (e.g. Home's cash flow card) can open a specific tab. */
+object AnalyticsTabs {
+    val selected = MutableStateFlow(AnalyticsTab.SPENDING)
+}
+
 data class AnalyticsUiState(
     val loading: Boolean = true,
+    val tab: AnalyticsTab = AnalyticsTab.SPENDING,
+    val cashFlow: CashFlowSummary? = null,
     val currency: AppCurrency = AppCurrency.USD,
     val type: PeriodType = PeriodType.MONTH,
     val offset: Int = 0,
@@ -76,12 +87,15 @@ class AnalyticsViewModel(
     private val offset = MutableStateFlow(0)
 
     val uiState: StateFlow<AnalyticsUiState> =
-        combine(expenses.expenses, settings.settings, type, offset) { all, prefs, type, offset ->
+        combine(expenses.expenses, settings.settings, type, offset, AnalyticsTabs.selected) { entries, prefs, type, offset, tab ->
             val today = LocalDate.now()
+            val all = Analytics.spending(entries)
             val period = Period.of(type, today, offset)
             val trendEnd = minOf(YearMonth.from(period.end), YearMonth.from(today))
             AnalyticsUiState(
                 loading = false,
+                tab = tab,
+                cashFlow = CashFlow.summarize(entries, period, today),
                 currency = prefs.currency,
                 type = type,
                 offset = offset,
@@ -98,6 +112,10 @@ class AnalyticsViewModel(
             type.value = value
             offset.value = 0
         }
+    }
+
+    fun setTab(tab: AnalyticsTab) {
+        AnalyticsTabs.selected.value = tab
     }
 
     fun previous() = offset.update { it - 1 }

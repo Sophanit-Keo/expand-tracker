@@ -76,3 +76,17 @@ val DarkColors = darkColorScheme(
 /** Spending going up is "bad", going down is "good" — used for the change chips. */
 val Increase = Color(0xFFE5484D)
 val Decrease = Color(0xFF2EA66F)
+
+/**
+ * Cash flow series colors (a validated categorical pair): money in vs money out. The light-mode
+ * steps sit below 3:1 on white, so charts always carry a legend and readable numbers next to them.
+ */
+val CashInLight = Color(0xFF00B894)
+val CashInDark = Color(0xFF00A888)
+val CashOutLight = Color(0xFFF47230)
+val CashOutDark = Color(0xFFE76624)
+
+/** Text color for "+$" amounts: a darker green that passes text contrast in both themes. */
+val CashInText: Color
+    @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable
+    get() = if (LocalDarkTheme.current) Color(0xFF53C556) else Color(0xFF006C10)

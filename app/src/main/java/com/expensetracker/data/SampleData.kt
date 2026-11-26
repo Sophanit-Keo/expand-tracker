@@ -53,6 +53,13 @@ object SampleData {
             if (date.dayOfMonth == 20 && date.monthValue % 2 == 0) {
                 add(Category.TRAVEL, "Weekend trip", random.nextDouble(60.0, 140.0), date)
             }
+            // Money in: a monthly salary, the odd freelance job, interest and refunds.
+            when {
+                date.dayOfMonth == 25 -> add(Category.SALARY, "Salary", 1_450.0, date)
+                date.dayOfMonth == date.lengthOfMonth() -> add(Category.INVESTMENT, "Savings interest", random.nextDouble(1.0, 3.0), date)
+                date.dayOfMonth == 12 && random.nextInt(3) > 0 -> add(Category.BUSINESS, "Freelance design job", random.nextDouble(90.0, 260.0), date)
+                random.nextInt(60) == 0 -> add(Category.REFUND, "Online order refund", random.nextDouble(8.0, 40.0), date)
+            }
         }
         return result
     }

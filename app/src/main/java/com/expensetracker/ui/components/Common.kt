@@ -42,6 +42,7 @@ import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Expense
 import com.expensetracker.ui.theme.Decrease
 import com.expensetracker.ui.theme.Increase
+import com.expensetracker.ui.theme.CashInText
 import com.expensetracker.util.formatMoney
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -118,8 +119,9 @@ fun ExpenseRow(
         }
         Spacer(Modifier.width(12.dp))
         Text(
-            "-" + formatMoney(expense.amount, currency),
+            (if (expense.isIncome) "+" else "-") + formatMoney(expense.amount, currency),
             style = MaterialTheme.typography.titleSmall,
+            color = if (expense.isIncome) CashInText else MaterialTheme.colorScheme.onSurface,
         )
     }
 }

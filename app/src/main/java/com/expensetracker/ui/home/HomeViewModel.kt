@@ -8,6 +8,8 @@ import com.expensetracker.data.ExpenseRepository
 import com.expensetracker.data.SampleData
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.domain.Analytics
+import com.expensetracker.domain.CashFlow
+import com.expensetracker.domain.CashFlowSummary
 import com.expensetracker.domain.CategoryTotal
 import com.expensetracker.domain.ChartPoint
 import com.expensetracker.domain.Period
@@ -39,6 +41,8 @@ data class HomeUiState(
     val topCategories: List<CategoryTotal> = emptyList(),
     val recent: List<Expense> = emptyList(),
     val isEmpty: Boolean = true,
+    /** This month's cash flow; null until some income has been recorded. */
+    val cashFlow: CashFlowSummary? = null,
 ) {
     /** Change vs the same number of days into last month, so early-month numbers aren't alarming. */
     val monthChangePercent: Double?
@@ -52,8 +56,9 @@ class HomeViewModel(
     private val settings: SettingsRepository,
 ) : ViewModel() {
 
-    val uiState: StateFlow<HomeUiState> = combine(expenses.expenses, settings.settings) { all, prefs ->
+    val uiState: StateFlow<HomeUiState> = combine(expenses.expenses, settings.settings) { entries, prefs ->
         val today = LocalDate.now()
+        val all = Analytics.spending(entries)
         val month = Period.of(PeriodType.MONTH, today)
         val week = Period.of(PeriodType.WEEK, today)
         val monthItems = Analytics.inRange(all, month.start, today)
@@ -79,8 +84,9 @@ class HomeViewModel(
                 if (it == today) "Today" else it.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
             },
             topCategories = Analytics.byCategory(monthItems).take(3),
-            recent = all.take(6),
-            isEmpty = all.isEmpty(),
+            recent = entries.take(6),
+            isEmpty = entries.isEmpty(),
+            cashFlow = CashFlow.summarize(entries, month, today).takeIf { it.hasIncome },
         )
     }
         .flowOn(Dispatchers.Default)
