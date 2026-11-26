@@ -33,8 +33,14 @@ object TableMapper {
             "description", "transaction details", "details", "narration", "narrative", "particulars", "remarks", "remark",
             "memo", "payee", "merchant", "beneficiary", "transaction", "purpose", "notes", "reference",
         ),
-        Role.DEBIT to listOf("money out", "paid out", "withdrawal", "withdrawals", "withdrawal amount", "debit", "debits", "debit amount", "dr", "out", "spent", "payments"),
-        Role.CREDIT to listOf("money in", "paid in", "deposit", "deposits", "deposit amount", "credit", "credits", "credit amount", "cr", "in", "received"),
+        Role.DEBIT to listOf(
+            "money out", "paid out", "cash out", "amount out", "withdrawal", "withdrawals", "withdrawal amount", "debit", "debits",
+            "debit amount", "debited", "dr", "out", "outgoing", "spent", "paid", "payments", "withdrawn", "sent", "expense", "expenses",
+        ),
+        Role.CREDIT to listOf(
+            "money in", "paid in", "cash in", "amount in", "deposit", "deposits", "deposit amount", "credit", "credits", "credit amount",
+            "credited", "cr", "in", "incoming", "received", "receipts", "income",
+        ),
         Role.AMOUNT to listOf("amount", "transaction amount", "amt", "value", "sum"),
         Role.TYPE to listOf("dr/cr", "cr/dr", "debit/credit", "d/c", "type", "transaction type", "dc"),
         Role.BALANCE to listOf("balance", "running balance", "available balance", "closing balance", "ledger balance"),
@@ -56,6 +62,8 @@ object TableMapper {
             val kw = keyword.split(' ')
             if (kw.size > 1 && joined.contains(keyword)) return 500 - i
             if (kw.size == 1 && keyword.length > 2 && keyword in cellWords) return 400 - i
+            // Short words like "in" only count in short labels ("Cash In", "In (USD)").
+            if (kw.size == 1 && keyword.length <= 2 && cellWords.size <= 2 && keyword in cellWords) return 300 - i
         }
         return 0
     }
@@ -101,6 +109,7 @@ object TableMapper {
         var credit = -1
         var type = -1
         var balance = -1
+        var onlyCredit = false
         if (headerRow >= 0) {
             val header = rows[headerRow]
             fun best(role: Role, exclude: Set<Int> = emptySet()) = header.indices
@@ -123,7 +132,8 @@ object TableMapper {
         val numeric = (0 until width).filter { it != date && it != balance && numberRatio(it) >= 0.6 }
         if (amount < 0 && (debit < 0 || credit < 0)) {
             if (debit >= 0 || credit >= 0) {
-                // Only one of debit/credit labelled; treat it as the amount column.
+                // Only one of debit/credit labelled: use it as the amount column, remembering which.
+                onlyCredit = credit >= 0
                 amount = maxOf(debit, credit).also { debit = -1; credit = -1 }
             } else {
                 amount = numeric.firstOrNull() ?: return null
@@ -148,8 +158,9 @@ object TableMapper {
             debitColumn = debit,
             creditColumn = credit,
             typeColumn = if (mode == AmountMode.SINGLE) type else -1,
-            // No negatives at all usually means charges are listed as positive numbers.
-            expensesArePositive = mode == AmountMode.SINGLE && type < 0 && amounts.isNotEmpty() && amounts.none { it < 0 },
+            // No negatives at all usually means charges are listed as positive numbers, unless the
+            // only money column is labelled as money in.
+            expensesArePositive = mode == AmountMode.SINGLE && type < 0 && !onlyCredit && amounts.isNotEmpty() && amounts.none { it < 0 },
             dateFormat = dateFormat,
             balanceColumn = balance,
             dotThousands = dotThousands,
@@ -205,8 +216,28 @@ object TableMapper {
         return StatementSummary(printedIn = printedIn, printedOut = printedOut, openingBalance = opening, closingBalance = closing)
     }
 
-    private val outWords = listOf("dr", "debit", "withdrawal", "out", "payment", "purchase", "d")
-    private val inWords = listOf("cr", "credit", "deposit", "in", "c", "refund")
+    // Type-column values. Strong words decide on their own; weak ones only when nothing else matches.
+    private val strongOut = setOf("withdrawal", "withdraw", "payment", "purchase", "expense", "expenses", "fee", "charge", "sent", "spend", "spending", "paid", "outgoing", "debited")
+    private val strongIn = setOf("deposit", "income", "salary", "refund", "received", "receive", "incoming", "credited", "reversal", "interest")
+    private val weakOut = setOf("out", "debit", "dr", "d")
+    private val weakIn = setOf("in", "credit", "cr", "c")
+
+    /** Direction from a type cell such as "DR", "Money Out", "Income", "Card purchase". */
+    fun directionFromType(value: String): Direction? {
+        val words = value.lowercase().split(Regex("""[^a-z]+""")).filter { it.isNotEmpty() }.toSet()
+        if (words.isEmpty()) return null
+        // Money coming back is money in, whatever it was for ("Refund of purchase").
+        if (words.any { it in setOf("refund", "refunded", "reversal", "reversed", "cashback", "chargeback") }) return Direction.IN
+        val so = words.any { it in strongOut }
+        val si = words.any { it in strongIn }
+        if (si && !so) return Direction.IN
+        if (so && !si) return Direction.OUT
+        val wo = words.any { it in weakOut }
+        val wi = words.any { it in weakIn }
+        if (wi && !wo) return Direction.IN
+        if (wo && !wi) return Direction.OUT
+        return null
+    }
 
     /** Turns spreadsheet rows into transactions; rows that aren't transactions (totals, notes) are skipped. */
     fun apply(rows: List<List<String>>, mapping: ColumnMapping): List<ParsedTransaction> =
@@ -231,10 +262,9 @@ object TableMapper {
                 }
                 AmountMode.SINGLE -> {
                     val value = AmountParser.parse(cell(mapping.amountColumn), dot)?.takeIf { it != 0.0 } ?: return@mapNotNull null
-                    val type = cell(mapping.typeColumn).lowercase().trim('.', ' ')
+                    val typed = if (mapping.typeColumn >= 0) directionFromType(cell(mapping.typeColumn)) else null
                     val direction = when {
-                        mapping.typeColumn >= 0 && type in outWords -> Direction.OUT
-                        mapping.typeColumn >= 0 && type in inWords -> Direction.IN
+                        typed != null -> typed
                         mapping.expensesArePositive -> if (value > 0) Direction.OUT else Direction.IN
                         else -> if (value < 0) Direction.OUT else Direction.IN
                     }

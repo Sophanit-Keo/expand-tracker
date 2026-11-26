@@ -36,7 +36,11 @@ object PdfStatementParser {
     }
 
     private val headerPhrases: List<Pair<String, Col?>> = listOf(
+        // Two-word labels first, so "Credit Amount" is one credit column, not credit + amount.
+        "debit amount" to Col.DEBIT, "withdrawal amount" to Col.DEBIT, "amount out" to Col.DEBIT, "cash out" to Col.DEBIT,
+        "credit amount" to Col.CREDIT, "deposit amount" to Col.CREDIT, "amount in" to Col.CREDIT, "cash in" to Col.CREDIT,
         "money out" to Col.DEBIT, "paid out" to Col.DEBIT, "withdrawal" to Col.DEBIT, "withdrawals" to Col.DEBIT,
+        "paid" to Col.DEBIT, "received" to Col.CREDIT,
         "debit" to Col.DEBIT, "debits" to Col.DEBIT, "dr" to Col.DEBIT, "out" to Col.DEBIT,
         "money in" to Col.CREDIT, "paid in" to Col.CREDIT, "deposit" to Col.CREDIT, "deposits" to Col.CREDIT,
         "credit" to Col.CREDIT, "credits" to Col.CREDIT, "cr" to Col.CREDIT, "in" to Col.CREDIT,
@@ -48,8 +52,19 @@ object PdfStatementParser {
     private val openingBalance = StatementWords.openingBalance
     private val nonTransaction = Regex("""(?i)^(total|closing balance|ending balance|balance carried|carried forward|sub-?total|grand total)""")
     private val timeToken = Regex("""(?i)^\d{1,2}:\d{2}(:\d{2})?$|^(am|pm)$""")
-    private val markers = setOf("DR", "CR", "Dr", "Cr", "D", "C")
-    private val currencyCodes = Regex("""^([A-Z]{3}|[$€£¥៛฿₫₩])$""")
+    /** Direction markers printed next to an amount: before it ("CR 1,000.00", "+ 50") or after ("12.50 DR"). */
+    private val outMarkers = setOf("DR", "Dr", "dr", "D", "-", "−")
+    private val inMarkers = setOf("CR", "Cr", "cr", "C", "+")
+    private val markers = outMarkers + inMarkers
+
+    /**
+     * Real currency codes only. Any three capital letters used to count, which deleted merchant names
+     * like "KFC" or "ATM" from descriptions.
+     */
+    private val currencyCodes = setOf(
+        "USD", "KHR", "EUR", "GBP", "THB", "VND", "SGD", "JPY", "CNY", "RMB", "INR", "AUD", "KRW", "MYR", "IDR", "PHP",
+        "HKD", "TWD", "CAD", "NZD", "CHF", "LAK", "MMK", "AED", "SAR", "BDT", "PKR", "LKR", "NPR", "$", "€", "£", "¥", "៛", "฿", "₫", "₩",
+    )
     private val fullYear = Regex("""(19|20)\d{2}""")
     private val rowNumber = Regex("""^\d{1,4}\.?$""")
 
@@ -150,7 +165,7 @@ object PdfStatementParser {
             val amounts = trailingAmounts(rest, 0, columns)
             if (amounts.isEmpty()) continue
             val descriptionWords = rest.take(rest.indexOf(amounts.first().word))
-                .dropLastWhile { it.text in markers || currencyCodes.matches(it.text) }
+                .dropLastWhile { it.text in markers || it.text in currencyCodes }
             raw += RawTx(date, descriptionWords.joinToString(" ") { it.text }.trim(), amounts, columns, line.y, line.page)
             if (columns.isNotEmpty()) usedHeader = true
         }
@@ -250,7 +265,14 @@ object PdfStatementParser {
         return if (isHeader && words.size <= 14) found else null
     }
 
-    /** Amount tokens at the end of the line (with any DR/CR marker or currency code next to them). */
+    private fun isOutMarker(marker: String?) = marker != null && marker in outMarkers
+    private fun isInMarker(marker: String?) = marker != null && marker in inMarkers
+
+    /**
+     * Amount tokens at the end of the line, with any marker next to them. Reading right to left, a
+     * marker belongs to the amount on its left ("12.50 DR"); a marker left over at the start of the
+     * amounts belongs to the amount on its right ("CR 1,000.00", "+ 50.00"). "+1,000.00" is money in.
+     */
     private fun trailingAmounts(words: List<PdfWord>, from: Int, columns: List<Column>): List<Money> {
         val result = mutableListOf<Money>()
         var i = words.size - 1
@@ -258,19 +280,31 @@ object PdfStatementParser {
         while (i >= from) {
             val t = words[i].text
             when {
-                t in markers -> pendingMarker = t
-                currencyCodes.matches(t) -> Unit
+                t in markers -> {
+                    // Two markers in a row: the earlier one was a prefix of the amount to its right.
+                    if (pendingMarker != null) attachPrefix(result, pendingMarker)
+                    pendingMarker = t
+                }
+                t in currencyCodes -> Unit
                 AmountParser.looksLikeMoney(t) || (columns.isNotEmpty() && underMoneyColumn(words[i], columns) && AmountParser.parse(t) != null && t.any(Char::isDigit) && t.length <= 15) -> {
                     var value = AmountParser.parse(t, dotThousands) ?: break
-                    if (pendingMarker?.startsWith("D") == true) value = -abs(value)
-                    result.add(0, Money(value, words[i], pendingMarker))
+                    val marker = pendingMarker ?: if (t.startsWith("+")) "+" else null
+                    if (isOutMarker(marker)) value = -abs(value)
+                    result.add(0, Money(value, words[i], marker))
                     pendingMarker = null
                 }
                 else -> break
             }
             i--
         }
+        if (pendingMarker != null) attachPrefix(result, pendingMarker)
         return result
+    }
+
+    private fun attachPrefix(result: MutableList<Money>, marker: String) {
+        val first = result.firstOrNull() ?: return
+        if (first.marker != null) return
+        result[0] = first.copy(value = if (isOutMarker(marker)) -abs(first.value) else abs(first.value), marker = marker)
     }
 
     private fun underMoneyColumn(word: PdfWord, columns: List<Column>): Boolean =
@@ -308,8 +342,8 @@ object PdfStatementParser {
         if (!explicit) {
             val marker = tx.amounts.firstOrNull { abs(it.value) == abs(value) }?.marker
             direction = when {
-                marker?.startsWith("D") == true || value < 0 -> Direction.OUT
-                marker?.startsWith("C") == true -> Direction.IN
+                isOutMarker(marker) || value < 0 -> Direction.OUT
+                isInMarker(marker) -> Direction.IN
                 // Words are the weakest evidence; the running balance (BalanceCheck) can still correct them.
                 inWords.containsMatchIn(tx.description) -> Direction.IN
                 outWords.containsMatchIn(tx.description) -> Direction.OUT

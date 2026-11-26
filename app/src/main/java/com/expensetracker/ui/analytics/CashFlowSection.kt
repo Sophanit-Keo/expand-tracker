@@ -239,6 +239,14 @@ private fun CashSummaryCard(summary: CashFlowSummary, state: AnalyticsUiState) {
             Figure("Cash in", "+" + formatMoney(summary.cashIn, currency), cashInColor, Modifier.weight(1f))
             Figure("Cash out", "−" + formatMoney(summary.cashOut, currency), cashOutColor, Modifier.weight(1f))
         }
+        if (summary.cashIn == 0.0) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "No money in recorded for this ${state.type.label.lowercase()}. Use ‹ to see earlier periods, or add income.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(Modifier.height(18.dp))
         Text(if (summary.net >= 0) "Left over" else "Short by", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(

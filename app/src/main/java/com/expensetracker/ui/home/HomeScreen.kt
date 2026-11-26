@@ -348,6 +348,17 @@ private fun CashFlowCard(summary: CashFlowSummary, state: HomeUiState, onOpen: (
                 Modifier.weight(1f),
             )
         }
+        if (summary.cashIn == 0.0) {
+            // Imported last month's statement? Its income is there, just not in this month's numbers.
+            val lastMonth = summary.monthly.getOrNull(summary.monthly.size - 2)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "No money in recorded yet this month." +
+                    (lastMonth?.takeIf { it.cashIn > 0 }?.let { " ${it.label}: +${formatMoney(it.cashIn, state.currency)} in. Tap Analysis to see it." } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         if (summary.cashIn > 0) {
             val used = (summary.cashOut / summary.cashIn).toFloat()
             Spacer(Modifier.height(14.dp))

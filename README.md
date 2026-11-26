@@ -46,7 +46,7 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
   - PDFs are read using where each word sits on the page, so Money in / Money out / Balance columns are told apart. If there's no column header, the running balance decides whether money went in or out. Password-protected PDFs are supported.
   - On the review screen, spending and money coming in (imported as income) are pre-selected, each with a suggested category. Duplicates are unticked: rows already imported, or ones that match something you typed in.
   - **Statement check** before you import: money in and out are compared with the statement's printed totals, and opening balance + in − out with the closing balance. When the file has a running balance, it decides whether each row was money in or out. If a row is still the wrong way round, tap ⇅ on it and the check updates.
-  - Handles dates printed with a time (`15/11/2026 10:32`) and amounts with dot thousands (`40.000`).
+  - Handles dates printed with a time (`15/11/2026 10:32`), amounts with dot thousands (`40.000`), and the many ways banks mark money in: `+1,000.00`, `CR 1,000.00`, Credit / Cash In / Received / Money In columns, and Type columns ("Money In", "Income", "DR/CR").
   - The statement is saved. The Cash flow tab shows your **bank balance** and checks that your cash flow for the statement's dates still matches it. If it doesn't, it says why: other entries in those dates (sample data or typed in by hand), or statement rows that weren't imported.
   - Change a category once and it's remembered for that merchant in future imports. Re-importing the same file won't create duplicates.
   - The file is read on the phone; nothing is uploaded.
@@ -103,6 +103,7 @@ app/src/main/java/com/expensetracker/
 - `ParsersTest`: amounts, dates, CSV, column detection and PDF layouts (column headers, running balance, DR/CR, newest-first)
 - `StatementAccuracyTest`: regressions for wrong imports (time after date, dot thousands, all-positive amounts with a balance column), printed totals and balances
 - `StatementStatusTest`: statement vs cash flow comparison and its explanations
+- `MoneyInFormatsTest`: 11 ways statements show money in vs money out
 - `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1, v2 and v3
 - `ImportFlowTest`: picks a CSV statement, checks it adds up (and that ⇅ breaks and restores the check), imports it, confirms the cash flow matches the statement, then re-imports to check for duplicates
 - `Light/DarkScreenshotTest`: drives the real app with sample data and captures every screen (Robolectric + Roborazzi, no emulator needed)

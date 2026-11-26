@@ -13,7 +13,7 @@ object AmountParser {
 
     /** Strict money shape used to pick amounts out of free text (PDF lines): needs decimals or grouping. */
     private val moneyShape = Regex(
-        """^[-−(]?(?:[A-Z]{3})?[$€£¥៛฿₫₩]?[-−]?(?:\d{1,3}(?:[,.  ]\d{3})+(?:[.,]\d{1,2})?|\d+[.,]\d{2})\)?-?(?:[A-Z]{3}|[$€£¥៛฿₫₩])?$""",
+        """^[-−+(]?(?:[A-Z]{3})?[$€£¥៛฿₫₩]?[-−]?(?:\d{1,3}(?:[,.  ]\d{3})+(?:[.,]\d{1,2})?|\d+[.,]\d{2})\)?-?(?:[A-Z]{3}|[$€£¥៛฿₫₩])?$""",
     )
 
     /**
