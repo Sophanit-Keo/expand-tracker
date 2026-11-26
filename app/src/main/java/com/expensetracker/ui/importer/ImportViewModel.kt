@@ -4,11 +4,14 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
+import com.expensetracker.data.BankStatement
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
 import com.expensetracker.data.Expense
 import com.expensetracker.data.ExpenseRepository
 import com.expensetracker.data.SettingsRepository
+import com.expensetracker.domain.StatementCheck
+import com.expensetracker.domain.StatementStatus
 import com.expensetracker.importer.AmountMode
 import com.expensetracker.importer.CategoryGuesser
 import com.expensetracker.importer.ColumnMapping
@@ -18,6 +21,8 @@ import com.expensetracker.importer.ParsedTransaction
 import com.expensetracker.importer.StatementContent
 import com.expensetracker.importer.StatementImporter
 import com.expensetracker.importer.StatementKind
+import com.expensetracker.importer.StatementRead
+import com.expensetracker.importer.StatementSummary
 import com.expensetracker.importer.TableMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,7 +42,37 @@ enum class RowFlag(val label: String) {
     ALREADY_IMPORTED("Already imported"),
     POSSIBLE_DUPLICATE("Possible duplicate of an expense you added"),
     MONEY_IN("Money in · added as income"),
-    CHECK_DIRECTION("Check: money in or out?"),
+    CHECK_DIRECTION("Money in or out? Tap ⇅ to switch"),
+}
+
+data class ImportCheck(
+    val periodStart: LocalDate,
+    val periodEnd: LocalDate,
+    val foundIn: Double,
+    val foundOut: Double,
+    val countIn: Int,
+    val countOut: Int,
+    val unsure: Int,
+    val summary: StatementSummary,
+) {
+    private fun same(a: Double, b: Double) = abs(a - b) < 0.01
+
+    val inMatches: Boolean? get() = summary.printedIn?.let { same(it, foundIn) }
+    val outMatches: Boolean? get() = summary.printedOut?.let { same(it, foundOut) }
+
+    /** Opening balance + money in − money out should equal the closing balance. */
+    val balanceDifference: Double?
+        get() {
+            val opening = summary.openingBalance ?: return null
+            val closing = summary.closingBalance ?: return null
+            return opening + foundIn - foundOut - closing
+        }
+    val balanceAddsUp: Boolean? get() = balanceDifference?.let { abs(it) < 0.01 }
+
+    private val checks get() = listOfNotNull(inMatches, outMatches, balanceAddsUp)
+    val hasChecks: Boolean get() = checks.isNotEmpty()
+    val allMatch: Boolean get() = hasChecks && checks.all { it } && unsure == 0
+    val hasProblem: Boolean get() = checks.any { !it }
 }
 
 data class ImportRow(
@@ -69,7 +104,10 @@ data class ImportUiState(
     val mappingAutoDetected: Boolean = false,
     // Review.
     val rows: List<ImportRow> = emptyList(),
+    val summary: StatementSummary = StatementSummary(),
     val pdfUsedColumns: Boolean = false,
+    /** How the saved statement compares with the app's cash flow (after importing). */
+    val statementStatus: StatementStatus? = null,
     // Result.
     val importedCount: Int = 0,
     val importedOut: Double = 0.0,
@@ -82,6 +120,24 @@ data class ImportUiState(
     val moneyInCount: Int get() = rows.count { it.type == EntryType.INCOME }
     private val selectableIncome get() = rows.filter { it.type == EntryType.INCOME && it.flag != RowFlag.ALREADY_IMPORTED }
     val moneyInSelected: Boolean get() = selectableIncome.isNotEmpty() && selectableIncome.all { it.selected }
+
+    /** Everything read from the file (imported or not) compared with the statement's own figures. */
+    val check: ImportCheck?
+        get() {
+            if (rows.isEmpty()) return null
+            val income = rows.filter { it.type == EntryType.INCOME }
+            val spending = rows.filter { it.type == EntryType.EXPENSE }
+            return ImportCheck(
+                periodStart = rows.minOf { it.date },
+                periodEnd = rows.maxOf { it.date },
+                foundIn = income.sumOf { it.amount },
+                foundOut = spending.sumOf { it.amount },
+                countIn = income.size,
+                countOut = spending.size,
+                unsure = rows.count { it.flag == RowFlag.CHECK_DIRECTION },
+                summary = summary,
+            )
+        }
     val skippedDuplicates: Int get() = rows.count { it.flag == RowFlag.ALREADY_IMPORTED || it.flag == RowFlag.POSSIBLE_DUPLICATE }
     val uncertainCount: Int get() = rows.count { it.flag == RowFlag.CHECK_DIRECTION }
 }
@@ -138,24 +194,24 @@ class ImportViewModel(
                     )
                 } else {
                     _state.update { it.copy(kind = StatementKind.PDF, pdfUsedColumns = content.result.usedColumnHeader) }
-                    showReview(content.result.transactions)
+                    showReview(content.result.read)
                 }
             }
             is StatementContent.Table -> {
                 val detected = withContext(Dispatchers.Default) { TableMapper.detect(content.rows) }
                 val mapping = detected ?: fallbackMapping(content.rows)
-                val parsed = withContext(Dispatchers.Default) { TableMapper.apply(content.rows, mapping) }
+                val parsed = withContext(Dispatchers.Default) { TableMapper.read(content.rows, mapping) }
                 _state.update {
                     it.copy(
                         kind = content.kind,
                         table = content.rows,
                         mapping = mapping,
                         columnLabels = TableMapper.columnLabels(content.rows, mapping.headerRow),
-                        mappingPreview = parsed.take(PREVIEW_ROWS),
+                        mappingPreview = parsed.transactions.take(PREVIEW_ROWS),
                         mappingAutoDetected = detected != null,
                     )
                 }
-                if (detected != null && parsed.isNotEmpty()) showReview(parsed) else _state.update { it.copy(step = ImportStep.MAP) }
+                if (detected != null && parsed.transactions.isNotEmpty()) showReview(parsed) else _state.update { it.copy(step = ImportStep.MAP) }
             }
         }
     }
@@ -182,7 +238,7 @@ class ImportViewModel(
             it.copy(
                 mapping = mapping,
                 columnLabels = TableMapper.columnLabels(table, mapping.headerRow),
-                mappingPreview = TableMapper.apply(table, mapping).take(PREVIEW_ROWS),
+                mappingPreview = TableMapper.read(table, mapping).transactions.take(PREVIEW_ROWS),
             )
         }
     }
@@ -191,8 +247,8 @@ class ImportViewModel(
         val s = _state.value
         val mapping = s.mapping ?: return
         viewModelScope.launch {
-            val parsed = withContext(Dispatchers.Default) { TableMapper.apply(s.table, mapping) }
-            if (parsed.isEmpty()) return@launch
+            val parsed = withContext(Dispatchers.Default) { TableMapper.read(s.table, mapping) }
+            if (parsed.transactions.isEmpty()) return@launch
             showReview(parsed)
         }
     }
@@ -201,7 +257,8 @@ class ImportViewModel(
 
     // --- Review ---------------------------------------------------------------------------------
 
-    private suspend fun showReview(transactions: List<ParsedTransaction>) {
+    private suspend fun showReview(read: StatementRead) {
+        val transactions = read.transactions
         val existingKeys = expenses.importKeys()
         val rules = expenses.categoryRules() + learned
         val manual = expenses.getAll().filter { it.importKey == null }
@@ -249,7 +306,7 @@ class ImportViewModel(
                 )
             }.sortedByDescending { it.date }
         }
-        _state.update { it.copy(step = ImportStep.REVIEW, rows = rows) }
+        _state.update { it.copy(step = ImportStep.REVIEW, rows = rows, summary = read.summary) }
     }
 
     fun toggleRow(id: Int) = _state.update { s ->
@@ -259,6 +316,34 @@ class ImportViewModel(
     fun selectAllVisible(selected: Boolean) = _state.update { s ->
         val visible = s.visibleRows.map { it.id }.toSet()
         s.copy(rows = s.rows.map { if (it.id in visible && it.flag != RowFlag.ALREADY_IMPORTED) it.copy(selected = selected) else it })
+    }
+
+    /** Switch a row between money in and money out (when the statement was read the wrong way). */
+    fun flipDirection(rowId: Int) {
+        viewModelScope.launch {
+            val rules = expenses.categoryRules() + learned
+            _state.update { s ->
+                s.copy(
+                    rows = s.rows.map { row ->
+                        if (row.id != rowId) return@map row
+                        val type = if (row.type == EntryType.INCOME) EntryType.EXPENSE else EntryType.INCOME
+                        val keyBase = row.importKey.removeSuffix("|in")
+                        row.copy(
+                            type = type,
+                            direction = if (type == EntryType.INCOME) Direction.IN else Direction.OUT,
+                            category = rules[row.merchantKey]?.takeIf { it.type == type }
+                                ?: if (type == EntryType.INCOME) CategoryGuesser.guessIncome(row.description)
+                                else CategoryGuesser.guess(row.description) ?: Category.OTHER,
+                            flag = when (row.flag) {
+                                RowFlag.ALREADY_IMPORTED, RowFlag.POSSIBLE_DUPLICATE -> row.flag
+                                else -> if (type == EntryType.INCOME) RowFlag.MONEY_IN else null
+                            },
+                            importKey = if (type == EntryType.INCOME) "$keyBase|in" else keyBase,
+                        )
+                    },
+                )
+            }
+        }
     }
 
     /** Tick or untick every money-in row (imported as income). */
@@ -286,8 +371,9 @@ class ImportViewModel(
     }
 
     fun import() {
-        val selected = _state.value.selectedRows
-        if (selected.isEmpty()) return
+        val current = _state.value
+        val selected = current.selectedRows
+        val check = current.check ?: return
         _state.update { it.copy(step = ImportStep.IMPORTING) }
         viewModelScope.launch {
             var createdAt = System.currentTimeMillis()
@@ -304,14 +390,38 @@ class ImportViewModel(
             }
             expenses.addAll(newExpenses)
             if (learned.isNotEmpty()) expenses.saveCategoryRules(learned.toMap())
+
+            // Remember the statement and link its entries (new and previously imported) to it.
+            val statement = BankStatement(
+                fileName = current.fileName ?: "Statement",
+                periodStart = check.periodStart,
+                periodEnd = check.periodEnd,
+                totalIn = check.foundIn,
+                totalOut = check.foundOut,
+                transactionCount = current.rows.size,
+                openingBalance = current.summary.openingBalance,
+                closingBalance = current.summary.closingBalance,
+            )
+            val linkKeys = current.rows.filter { it.selected || it.flag == RowFlag.ALREADY_IMPORTED }.map { it.importKey }
+            val id = expenses.saveStatement(statement, linkKeys)
+            val status = StatementCheck.status(statement.copy(id = id), expenses.getAll())
             _state.update {
                 it.copy(
                     step = ImportStep.DONE,
                     importedCount = newExpenses.size,
                     importedOut = newExpenses.filterNot { e -> e.isIncome }.sumOf { e -> e.amount },
                     importedIn = newExpenses.filter { e -> e.isIncome }.sumOf { e -> e.amount },
+                    statementStatus = status,
                 )
             }
+        }
+    }
+
+    fun removeSampleData() {
+        viewModelScope.launch {
+            expenses.removeSampleData()
+            val status = _state.value.statementStatus ?: return@launch
+            _state.update { it.copy(statementStatus = StatementCheck.status(status.statement, expenses.getAll())) }
         }
     }
 

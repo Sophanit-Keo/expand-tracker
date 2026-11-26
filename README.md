@@ -19,9 +19,9 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
   <img src="docs/screenshots/9c_cash_flow_recurring_dark.png" width="230" alt="Regular income and bills, dark theme">
 </p>
 <p>
-  <img src="docs/screenshots/6_import_start.png" width="230" alt="Import a bank statement">
-  <img src="docs/screenshots/7_import_review.png" width="230" alt="Review imported transactions">
-  <img src="docs/screenshots/8_import_done.png" width="230" alt="Import finished">
+  <img src="docs/screenshots/7_import_review.png" width="230" alt="Statement check and review">
+  <img src="docs/screenshots/8_import_done.png" width="230" alt="Cash flow vs statement after import">
+  <img src="docs/screenshots/10_cash_flow_statement.png" width="230" alt="Bank statement and balance in cash flow">
 </p>
 
 ## Features
@@ -45,9 +45,12 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
   - Columns are detected automatically (Date, Description, Amount or Money in/out, DR/CR). The date format is detected too, including telling 03/11 = 3 Nov apart from 11 Mar.
   - PDFs are read using where each word sits on the page, so Money in / Money out / Balance columns are told apart. If there's no column header, the running balance decides whether money went in or out. Password-protected PDFs are supported.
   - On the review screen, spending and money coming in (imported as income) are pre-selected, each with a suggested category. Duplicates are unticked: rows already imported, or ones that match something you typed in.
+  - **Statement check** before you import: money in and out are compared with the statement's printed totals, and opening balance + in − out with the closing balance. When the file has a running balance, it decides whether each row was money in or out. If a row is still the wrong way round, tap ⇅ on it and the check updates.
+  - Handles dates printed with a time (`15/11/2026 10:32`) and amounts with dot thousands (`40.000`).
+  - The statement is saved. The Cash flow tab shows your **bank balance** and checks that your cash flow for the statement's dates still matches it. If it doesn't, it says why: other entries in those dates (sample data or typed in by hand), or statement rows that weren't imported.
   - Change a category once and it's remembered for that merchant in future imports. Re-importing the same file won't create duplicates.
   - The file is read on the phone; nothing is uploaded.
-- **Settings**: 12 currencies (USD, EUR, KHR, THB, VND, …), monthly budget, light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet, sample data, delete all.
+- **Settings**: 12 currencies (USD, EUR, KHR, THB, VND, …), monthly budget, light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet, add or remove sample data, delete all.
 
 ## Install on your phone
 
@@ -98,6 +101,8 @@ app/src/main/java/com/expensetracker/
 - `CashFlowTest`: in/out totals, savings rate, recurring detection, safe-to-spend and forecast, overspent months
 - `AddExpenseFlowTest`: adds an expense through the real UI and checks it's saved and listed
 - `ParsersTest`: amounts, dates, CSV, column detection and PDF layouts (column headers, running balance, DR/CR, newest-first)
-- `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1 and v2
-- `ImportFlowTest`: picks a CSV statement, reviews it, imports it, then checks that re-importing finds only duplicates
+- `StatementAccuracyTest`: regressions for wrong imports (time after date, dot thousands, all-positive amounts with a balance column), printed totals and balances
+- `StatementStatusTest`: statement vs cash flow comparison and its explanations
+- `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1, v2 and v3
+- `ImportFlowTest`: picks a CSV statement, checks it adds up (and that ⇅ breaks and restores the check), imports it, confirms the cash flow matches the statement, then re-imports to check for duplicates
 - `Light/DarkScreenshotTest`: drives the real app with sample data and captures every screen (Robolectric + Roborazzi, no emulator needed)

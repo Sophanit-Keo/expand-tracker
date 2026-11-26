@@ -72,11 +72,13 @@ class ImporterIntegrationTest {
         val content = importer.load(StatementImporter.PickedFile("statement.pdf", statementPdf()))
         val result = (content as StatementContent.Pdf).result
         assertTrue(result.usedColumnHeader)
+        assertEquals(500.0, result.summary.openingBalance!!, 0.0)
+        assertEquals(1423.3, result.summary.closingBalance!!, 1e-9)
         assertEquals(
             listOf(
-                ParsedTransaction(LocalDate.of(2026, 11, 3), "KFC AEON MALL", 12.5, Direction.OUT),
-                ParsedTransaction(LocalDate.of(2026, 11, 5), "SALARY NOVEMBER", 1000.0, Direction.IN),
-                ParsedTransaction(LocalDate.of(2026, 11, 9), "LUCKY SUPERMARKET", 64.2, Direction.OUT),
+                ParsedTransaction(LocalDate.of(2026, 11, 3), "KFC AEON MALL", 12.5, Direction.OUT, 487.5),
+                ParsedTransaction(LocalDate.of(2026, 11, 5), "SALARY NOVEMBER", 1000.0, Direction.IN, 1487.5),
+                ParsedTransaction(LocalDate.of(2026, 11, 9), "LUCKY SUPERMARKET", 64.2, Direction.OUT, 1423.3),
             ),
             result.transactions,
         )
@@ -135,6 +137,38 @@ class ImporterIntegrationTest {
         val bytes = byteArrayOf(0xD0.toByte(), 0xCF.toByte(), 0x11, 0xE0.toByte(), 0, 0, 0, 0)
         val content = importer.load(StatementImporter.PickedFile("statement.xls", bytes))
         assertTrue((content as StatementContent.Unsupported).message.contains(".xlsx"))
+    }
+
+    /** v3 (cash flow release) upgrades to v4: statements table, and entries keep their data. */
+    @Test
+    fun upgradeFromVersion3AddsStatements() = runBlocking {
+        val name = "upgrade-v3-test.db"
+        context.deleteDatabase(name)
+        SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(name).apply { parentFile?.mkdirs() }, null).use { db ->
+            db.execSQL("CREATE TABLE IF NOT EXISTS `expenses` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `amount` REAL NOT NULL, `category` TEXT NOT NULL, `note` TEXT NOT NULL, `date` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `importKey` TEXT, `type` TEXT NOT NULL DEFAULT 'EXPENSE')")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `category_rules` (`merchant` TEXT NOT NULL, `category` TEXT NOT NULL, PRIMARY KEY(`merchant`))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_expenses_date` ON `expenses` (`date`)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)")
+            db.execSQL("INSERT INTO expenses (amount, category, note, date, createdAt, importKey, type) VALUES (1500, 'SALARY', 'Salary', ${LocalDate.of(2026, 11, 25).toEpochDay()}, 1, '2026-11-25|150000|salary|0|in', 'INCOME')")
+            db.version = 3
+        }
+        val database = AppDatabase.build(context, name)
+        try {
+            val entry = database.expenseDao().getAll().single()
+            assertEquals(com.expensetracker.data.EntryType.INCOME, entry.type)
+            assertNull(entry.statementId)
+            val id = database.statementDao().insert(
+                com.expensetracker.data.BankStatement(
+                    fileName = "nov.csv", periodStart = LocalDate.of(2026, 11, 1), periodEnd = LocalDate.of(2026, 11, 30),
+                    totalIn = 1500.0, totalOut = 0.0, transactionCount = 1, openingBalance = 0.0, closingBalance = 1500.0,
+                ),
+            )
+            database.expenseDao().linkToStatement(listOf("2026-11-25|150000|salary|0|in"), id)
+            assertEquals(id, database.expenseDao().getAll().single().statementId)
+        } finally {
+            database.close()
+            context.deleteDatabase(name)
+        }
     }
 
     /** The version-2 database (statement import release) upgrades to v3 with every entry an expense. */

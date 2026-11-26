@@ -4,7 +4,11 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performScrollToNode
+import com.expensetracker.ui.analytics.AnalyticsTab
+import com.expensetracker.ui.analytics.AnalyticsTabs
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -59,6 +63,7 @@ class ImportFlowTest {
 
     @Before
     fun seed() {
+        AnalyticsTabs.selected.value = AnalyticsTab.SPENDING
         runBlocking {
             container.expenseRepository.clear()
             container.settingsRepository.setCurrency(AppCurrency.USD)
@@ -94,16 +99,36 @@ class ImportFlowTest {
 
         pickFile(file)
         compose.waitUntilAtLeastOneExists(hasText("7 transactions found"), timeoutMillis = 15_000)
+        // The file's running balance adds up: opening 1,000 + 2,500 in − 179.04 out = 3,320.96.
+        compose.waitUntilAtLeastOneExists(hasText("Adds up"), timeoutMillis = 5_000)
         shoot("7_import_review")
+
+        // Switching a row the wrong way round breaks the check; switching it back fixes it.
+        compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("flip_5"))
+        compose.onNode(hasTestTag("flip_5")).performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("statement_check"))
+        compose.waitUntilAtLeastOneExists(hasText("Check rows"), timeoutMillis = 5_000)
+        compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("flip_5"))
+        compose.onNode(hasTestTag("flip_5")).performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("statement_check"))
+        compose.waitUntilAtLeastOneExists(hasText("Adds up"), timeoutMillis = 5_000)
 
         // The 12.00 lunch duplicates a hand-entered expense: unticked. Everything else is selected:
         // Starbucks, Grab, Lucky, Netflix, ATM (spending) and the salary (income) = 6.
         compose.onNode(hasTestTag("import_confirm")).performClick()
         compose.waitUntilAtLeastOneExists(hasText("Imported 6 transactions"), timeoutMillis = 10_000)
+        // The hand-typed lunch stands in for the unticked statement row, so totals still agree.
+        compose.waitUntilAtLeastOneExists(hasText("Matches"), timeoutMillis = 5_000)
         shoot("8_import_done")
 
         val imported = runBlocking { container.expenseRepository.getAll() }.filter { it.importKey != null }
         assertEquals(6, imported.size)
+        val statement = runBlocking { container.expenseRepository.statements.first() }.single()
+        assertEquals(2500.0, statement.totalIn, 0.0)
+        assertEquals(179.04, statement.totalOut, 1e-9)
+        assertEquals(1000.0, statement.openingBalance!!, 1e-9)
+        assertEquals(3320.96, statement.closingBalance!!, 1e-9)
+        assertTrue(imported.all { it.statementId == statement.id })
         val salary = imported.single { it.isIncome }
         assertEquals(Category.SALARY, salary.category)
         assertEquals(2500.0, salary.amount, 0.0)
@@ -115,15 +140,23 @@ class ImportFlowTest {
         assertEquals(LocalDate.of(2026, 11, 3), byNote.getValue("Starbucks").date)
         assertEquals(5.75, byNote.getValue("Starbucks").amount, 0.0)
 
+        // "View cash flow" opens the statement's month with the bank statement card.
+        compose.onNode(hasTestTag("view_cash_flow")).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Bank statement"), timeoutMillis = 10_000)
+        shoot("10_cash_flow_statement")
+
         // Importing the same file again finds nothing new.
-        compose.onNode(hasText("Done")).performClick()
+        compose.onNode(hasTestTag("nav_history")).performClick()
         compose.waitUntilAtLeastOneExists(hasTestTag("history_import"), timeoutMillis = 10_000)
         compose.onNode(hasTestTag("history_import")).performClick()
         compose.waitUntilAtLeastOneExists(hasText("Import from your bank"), timeoutMillis = 10_000)
         pickFile(file)
-        compose.waitUntilAtLeastOneExists(hasText("Select transactions to import"), timeoutMillis = 15_000)
-        // Nothing new: every row is already imported (or the hand-entered duplicate), so the button is off.
-        compose.onNode(hasTestTag("import_confirm")).assertIsNotEnabled()
+        compose.waitUntilAtLeastOneExists(hasText("Save statement (nothing new to import)"), timeoutMillis = 15_000)
         assertTrue(compose.onAllNodes(hasText("Already imported")).fetchSemanticsNodes().isNotEmpty())
+        // Saving again replaces the statement instead of duplicating it.
+        compose.onNode(hasTestTag("import_confirm")).performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Statement saved"), timeoutMillis = 10_000)
+        assertEquals(1, runBlocking { container.expenseRepository.statements.first() }.size)
+        assertEquals(6, runBlocking { container.expenseRepository.getAll() }.count { it.importKey != null })
     }
 }

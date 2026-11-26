@@ -16,7 +16,19 @@ object AmountParser {
         """^[-−(]?(?:[A-Z]{3})?[$€£¥៛฿₫₩]?[-−]?(?:\d{1,3}(?:[,.  ]\d{3})+(?:[.,]\d{1,2})?|\d+[.,]\d{2})\)?-?(?:[A-Z]{3}|[$€£¥៛฿₫₩])?$""",
     )
 
-    fun parse(raw: String?): Double? {
+    /**
+     * True when a column (or document) writes thousands with dots and has no decimals, like
+     * "40.000" for forty thousand (common for riel, dong, rupiah). Without this, "40.000" reads as 40.
+     */
+    fun usesDotThousands(values: List<String>): Boolean {
+        val dotted = values.map { it.trim() }.filter { it.contains('.') && it.any(Char::isDigit) }
+        if (dotted.isEmpty()) return false
+        val decimals = Regex("""\.\d{1,2}(\D*)$""")
+        val thousands = Regex("""\d\.\d{3}(\D*)$""")
+        return dotted.none { decimals.containsMatchIn(it) && !it.contains(',') } && dotted.any { thousands.containsMatchIn(it) }
+    }
+
+    fun parse(raw: String?, dotThousands: Boolean = false): Double? {
         if (raw == null) return null
         var s = raw.trim().replace('−', '-').replace(' ', ' ')
         if (s.isEmpty()) return null
@@ -42,7 +54,7 @@ object AmountParser {
         if (s.isEmpty() || s.any { !it.isDigit() && it != ',' && it != '.' }) return null
         if (!s.any(Char::isDigit)) return null
 
-        val normalized = normalizeSeparators(s) ?: return null
+        val normalized = (if (dotThousands) s.replace(".", "").replace(',', '.') else normalizeSeparators(s)) ?: return null
         val value = normalized.toDoubleOrNull() ?: return null
         return if (negative) -value else value
     }
@@ -52,6 +64,9 @@ object AmountParser {
         val t = token.trim()
         return moneyShape.matches(t) && parse(t) != null
     }
+
+    /** Any number-looking token (used to decide the thousands style of a whole document). */
+    fun isNumberToken(token: String): Boolean = Regex("""^[-−(]?[$€£¥៛฿₫₩]?\d[\d.,]*\)?-?$""").matches(token.trim())
 
     private fun normalizeSeparators(s: String): String? {
         val lastComma = s.lastIndexOf(',')

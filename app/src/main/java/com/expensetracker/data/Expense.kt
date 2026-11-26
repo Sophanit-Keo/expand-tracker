@@ -10,6 +10,8 @@ import java.time.LocalDate
  * One money movement: an expense (money out) or, when [type] is [EntryType.INCOME], money in.
  * The table keeps its original name so existing data needs no copying.
  */
+const val SAMPLE_PREFIX = "sample|"
+
 @Entity(tableName = "expenses", indices = [Index("date")])
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -22,7 +24,11 @@ data class Expense(
     val importKey: String? = null,
     @ColumnInfo(defaultValue = "EXPENSE")
     val type: EntryType = category.type,
+    /** The bank statement this entry was imported from, if any. */
+    val statementId: Long? = null,
 ) {
+    val isSample: Boolean get() = importKey?.startsWith(SAMPLE_PREFIX) == true
+
     val isIncome: Boolean get() = type == EntryType.INCOME
 
     /** The text shown as the main line of a transaction row. */

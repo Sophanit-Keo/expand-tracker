@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 @Dao
 interface ExpenseDao {
@@ -32,6 +33,30 @@ interface ExpenseDao {
 
     @Query("SELECT importKey FROM expenses WHERE importKey IS NOT NULL")
     suspend fun importKeys(): List<String>
+
+    @Query("UPDATE expenses SET statementId = :statementId WHERE importKey IN (:keys)")
+    suspend fun linkToStatement(keys: List<String>, statementId: Long)
+
+    @Query("DELETE FROM expenses WHERE importKey LIKE 'sample|%'")
+    suspend fun deleteSamples(): Int
+}
+
+@Dao
+interface StatementDao {
+    @Query("SELECT * FROM statements ORDER BY periodEnd DESC, importedAt DESC")
+    fun observeAll(): Flow<List<BankStatement>>
+
+    @Insert
+    suspend fun insert(statement: BankStatement): Long
+
+    @Query("SELECT id FROM statements WHERE periodStart = :start AND periodEnd = :end AND fileName = :fileName")
+    suspend fun findSame(start: LocalDate, end: LocalDate, fileName: String): List<Long>
+
+    @Query("DELETE FROM statements WHERE id IN (:ids)")
+    suspend fun delete(ids: List<Long>)
+
+    @Query("DELETE FROM statements")
+    suspend fun deleteAll()
 }
 
 @Dao

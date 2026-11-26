@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,8 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.EventRepeat
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Savings
@@ -29,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +47,7 @@ import com.expensetracker.data.EntryType
 import com.expensetracker.domain.CashFlowSummary
 import com.expensetracker.domain.PeriodType
 import com.expensetracker.domain.RecurringItem
+import com.expensetracker.domain.StatementStatus
 import com.expensetracker.ui.charts.CashFlowChart
 import com.expensetracker.ui.charts.ChartLegend
 import com.expensetracker.ui.charts.LineChart
@@ -89,10 +94,16 @@ fun LazyListScope.cashFlowItems(
     state: AnalyticsUiState,
     onAddIncome: () -> Unit,
     onImport: () -> Unit,
+    onRemoveSampleData: () -> Unit = {},
 ) {
     val summary = state.cashFlow ?: return
     val currency = state.currency
     val periodWord = state.type.label.lowercase()
+
+    // Bank statements first: they're the reference the cash flow should agree with.
+    if (state.statements.isNotEmpty()) {
+        item { StatementsCard(state, onRemoveSampleData) }
+    }
 
     if (!summary.hasIncome) {
         item {
@@ -395,5 +406,116 @@ internal fun InsightRow(icon: ImageVector, tint: Color, title: String, detail: S
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+@Composable
+private fun StatementsCard(state: AnalyticsUiState, onRemoveSampleData: () -> Unit) {
+    val currency = state.currency
+    val balance = state.bankBalance
+    SectionCard(
+        title = if (state.statements.size == 1) "Bank statement" else "Bank statements",
+        subtitle = balance?.let { "Bank balance ${formatMoney(it.closingBalance ?: 0.0, currency)} on ${shortDate(it.periodEnd)}, ${it.periodEnd.year}" },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            state.statements.forEach { StatementBlock(it, currency, onRemoveSampleData) }
+        }
+    }
+}
+
+@Composable
+private fun StatementBlock(status: StatementStatus, currency: AppCurrency, onRemoveSampleData: () -> Unit) {
+    val st = status.statement
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(st.fileName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${shortDate(st.periodStart)} – ${shortDate(st.periodEnd)}, ${st.periodEnd.year} · ${st.transactionCount} transactions",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            MatchBadge(status.matches)
+        }
+        Spacer(Modifier.height(12.dp))
+        StatementLine("On the statement", "+" + formatMoney(st.totalIn, currency), "−" + formatMoney(st.totalOut, currency))
+        StatementLine("In your cash flow", "+" + formatMoney(status.appIn, currency), "−" + formatMoney(status.appOut, currency))
+        if (st.openingBalance != null && st.closingBalance != null) {
+            Row(Modifier.padding(top = 6.dp)) {
+                Text("Balance", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(120.dp))
+                Text(
+                    "${formatMoney(st.openingBalance, currency)} → ${formatMoney(st.closingBalance, currency)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        if (!status.matches) {
+            val reasons = buildList {
+                if (status.otherCount > 0) {
+                    val sample = if (status.sampleCount > 0) " (${status.sampleCount} are sample data)" else ""
+                    add("${status.otherCount} other ${if (status.otherCount == 1) "entry is" else "entries are"} in these dates$sample: " + moneyPair(status.otherIn, status.otherOut, currency) + ".")
+                }
+                if (status.missingIn > 0.005 || status.missingOut > 0.005) {
+                    add("Not imported from the statement (unticked or deleted): " + moneyPair(status.missingIn, status.missingOut, currency) + ".")
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("Why it's different", style = MaterialTheme.typography.labelLarge)
+                reasons.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (status.sampleCount > 0) {
+                    TextButton(onClick = onRemoveSampleData, contentPadding = PaddingValues(0.dp)) { Text("Remove sample data") }
+                }
+            }
+        }
+    }
+}
+
+private fun moneyPair(inValue: Double, outValue: Double, currency: AppCurrency) = buildList {
+    if (inValue > 0.005) add("+" + formatMoney(inValue, currency) + " in")
+    if (outValue > 0.005) add("−" + formatMoney(outValue, currency) + " out")
+}.joinToString(", ").ifEmpty { formatMoney(0.0, currency) }
+
+@Composable
+private fun StatementLine(label: String, inText: String, outText: String) {
+    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(120.dp))
+        Text(inText, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = CashInText, modifier = Modifier.weight(1f))
+        Text(outText, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+internal fun MatchBadge(matches: Boolean) {
+    val tint = if (matches) Decrease else MaterialTheme.colorScheme.tertiary
+    Row(
+        Modifier
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.14f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (matches) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(if (matches) "Matches" else "Differs", style = MaterialTheme.typography.labelMedium, color = tint)
     }
 }

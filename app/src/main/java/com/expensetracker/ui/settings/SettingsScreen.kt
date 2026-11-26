@@ -183,6 +183,18 @@ fun SettingsScreen(
                         },
                     )
                     GroupDivider()
+                    if (state.sampleCount > 0) {
+                        SettingsItem(
+                            icon = Icons.Rounded.AutoAwesome,
+                            title = "Remove sample data",
+                            subtitle = "${state.sampleCount} example entries. Your own and imported entries stay.",
+                            onClick = {
+                                viewModel.removeSampleData()
+                                scope.launch { snackbar.showSnackbar("Sample data removed") }
+                            },
+                        )
+                        GroupDivider()
+                    }
                     SettingsItem(
                         icon = Icons.Rounded.AutoAwesome,
                         title = "Add sample data",

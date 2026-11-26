@@ -134,6 +134,7 @@ fun AnalyticsScreen(
             onNext = viewModel::next,
             onAddIncome = onAddIncome,
             onImport = onImport,
+            onRemoveSampleData = viewModel::removeSampleData,
         )
     }
 }
@@ -147,6 +148,7 @@ fun AnalyticsContent(
     onNext: () -> Unit,
     onAddIncome: () -> Unit = {},
     onImport: () -> Unit = {},
+    onRemoveSampleData: () -> Unit = {},
 ) {
     val summary = state.summary
     val listState = rememberLazyListState()
@@ -175,7 +177,7 @@ fun AnalyticsContent(
 
         if (summary == null) return@LazyColumn
         if (state.tab == AnalyticsTab.CASH_FLOW) {
-            cashFlowItems(state, onAddIncome, onImport)
+            cashFlowItems(state, onAddIncome, onImport, onRemoveSampleData)
             return@LazyColumn
         }
 

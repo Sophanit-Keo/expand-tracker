@@ -17,6 +17,10 @@ data class ColumnMapping(
     /** Single-amount files where spending is positive (typical for credit cards). */
     val expensesArePositive: Boolean = false,
     val dateFormat: String,
+    /** Running balance column, used to double-check money in vs out. */
+    val balanceColumn: Int = -1,
+    /** Amounts written like "40.000" for forty thousand. */
+    val dotThousands: Boolean = false,
 )
 
 object TableMapper {
@@ -96,6 +100,7 @@ object TableMapper {
         var debit = -1
         var credit = -1
         var type = -1
+        var balance = -1
         if (headerRow >= 0) {
             val header = rows[headerRow]
             fun best(role: Role, exclude: Set<Int> = emptySet()) = header.indices
@@ -108,13 +113,14 @@ object TableMapper {
             credit = best(Role.CREDIT)
             amount = best(Role.AMOUNT)
             type = best(Role.TYPE)
-            description = best(Role.DESCRIPTION, setOf(date, debit, credit, amount, type))
+            balance = best(Role.BALANCE)
+            description = best(Role.DESCRIPTION, setOf(date, debit, credit, amount, type, balance))
         }
 
         // Fill gaps from the data itself.
         if (date < 0) date = (0 until width).maxByOrNull(::dateRatio)?.takeIf { dateRatio(it) >= 0.6 } ?: -1
         if (date < 0) return null
-        val numeric = (0 until width).filter { it != date && numberRatio(it) >= 0.6 }
+        val numeric = (0 until width).filter { it != date && it != balance && numberRatio(it) >= 0.6 }
         if (amount < 0 && (debit < 0 || credit < 0)) {
             if (debit >= 0 || credit >= 0) {
                 // Only one of debit/credit labelled; treat it as the amount column.
@@ -124,13 +130,15 @@ object TableMapper {
             }
         }
         if (description < 0) {
-            val used = setOf(date, amount, debit, credit, type)
+            val used = setOf(date, amount, debit, credit, type, balance)
             description = (0 until width).filter { it !in used && numberRatio(it) < 0.5 }.maxByOrNull(::textLength) ?: -1
         }
 
         val mode = if (debit >= 0 && credit >= 0) AmountMode.DEBIT_CREDIT else AmountMode.SINGLE
         val dateFormat = DateParser.detectFormat(column(date)) ?: return null
-        val amounts = if (mode == AmountMode.SINGLE) column(amount).mapNotNull { AmountParser.parse(it) } else emptyList()
+        val moneyColumns = listOf(amount, debit, credit, balance).filter { it >= 0 }
+        val dotThousands = AmountParser.usesDotThousands(moneyColumns.flatMap { column(it) })
+        val amounts = if (mode == AmountMode.SINGLE) column(amount).mapNotNull { AmountParser.parse(it, dotThousands) } else emptyList()
         return ColumnMapping(
             headerRow = headerRow,
             dateColumn = date,
@@ -143,7 +151,58 @@ object TableMapper {
             // No negatives at all usually means charges are listed as positive numbers.
             expensesArePositive = mode == AmountMode.SINGLE && type < 0 && amounts.isNotEmpty() && amounts.none { it < 0 },
             dateFormat = dateFormat,
+            balanceColumn = balance,
+            dotThousands = dotThousands,
         )
+    }
+
+    /**
+     * Transactions plus the statement's own figures (opening/closing balance, printed totals),
+     * with money in/out double-checked against the running balance when there is one.
+     */
+    fun read(rows: List<List<String>>, mapping: ColumnMapping): StatementRead =
+        BalanceCheck.apply(StatementRead(apply(rows, mapping), summary(rows, mapping)))
+
+    private fun summary(rows: List<List<String>>, mapping: ColumnMapping): StatementSummary {
+        var opening: Double? = null
+        var closing: Double? = null
+        var printedIn: Double? = null
+        var printedOut: Double? = null
+        fun money(row: List<String>, column: Int) = row.getOrNull(column)?.let { AmountParser.parse(it, mapping.dotThousands) }
+        fun lastMoney(row: List<String>) = row.asReversed().firstNotNullOfOrNull { cell ->
+            cell.takeIf { AmountParser.parse(it, mapping.dotThousands) != null && DateParser.parseAny(it) == null }
+                ?.let { AmountParser.parse(it, mapping.dotThousands) }
+        }
+        // Statements often put these lines above the header too ("Opening balance: 500.00").
+        rows.forEach { row ->
+            val text = row.joinToString(" ")
+            val isTransaction = DateParser.parse(row.getOrElse(mapping.dateColumn) { "" }, mapping.dateFormat) != null &&
+                !StatementWords.openingBalance.containsMatchIn(text) && !StatementWords.closingBalance.containsMatchIn(text)
+            if (isTransaction) return@forEach
+            when {
+                StatementWords.openingBalance.containsMatchIn(text) ->
+                    opening = money(row, mapping.balanceColumn) ?: lastMoney(row)
+                StatementWords.closingBalance.containsMatchIn(text) ->
+                    closing = money(row, mapping.balanceColumn) ?: lastMoney(row)
+                StatementWords.totalIn.containsMatchIn(text) -> printedIn = lastMoney(row)?.let { kotlin.math.abs(it) }
+                StatementWords.totalOut.containsMatchIn(text) -> printedOut = lastMoney(row)?.let { kotlin.math.abs(it) }
+                StatementWords.total.containsMatchIn(text) && mapping.amountMode == AmountMode.DEBIT_CREDIT -> {
+                    money(row, mapping.debitColumn)?.let { printedOut = kotlin.math.abs(it) }
+                    money(row, mapping.creditColumn)?.let { printedIn = kotlin.math.abs(it) }
+                }
+            }
+        }
+        // An opening row inside the table: "Opening balance" (or simply a first row with a balance
+        // but no amount, like "01/11, Opening, 0, 500.00").
+        val dataRows = rows.drop(mapping.headerRow + 1)
+        val noAmount = { row: List<String> ->
+            listOf(mapping.amountColumn, mapping.debitColumn, mapping.creditColumn).filter { it >= 0 }
+                .all { c -> (money(row, c) ?: 0.0) == 0.0 }
+        }
+        (dataRows.firstOrNull { row -> StatementWords.openingBalance.containsMatchIn(row.getOrElse(mapping.descriptionColumn) { "" }) }
+            ?: dataRows.firstOrNull()?.takeIf { noAmount(it) })
+            ?.let { row -> opening = opening ?: money(row, mapping.balanceColumn) }
+        return StatementSummary(printedIn = printedIn, printedOut = printedOut, openingBalance = opening, closingBalance = closing)
     }
 
     private val outWords = listOf("dr", "debit", "withdrawal", "out", "payment", "purchase", "d")
@@ -155,11 +214,15 @@ object TableMapper {
             fun cell(i: Int) = if (i < 0) "" else row.getOrElse(i) { "" }.trim()
             val date = DateParser.parse(cell(mapping.dateColumn), mapping.dateFormat) ?: return@mapNotNull null
             val description = cell(mapping.descriptionColumn)
+            if (StatementWords.openingBalance.containsMatchIn(description) || StatementWords.closingBalance.containsMatchIn(description)) {
+                return@mapNotNull null
+            }
+            val dot = mapping.dotThousands
 
             val (amount, direction) = when (mapping.amountMode) {
                 AmountMode.DEBIT_CREDIT -> {
-                    val debit = AmountParser.parse(cell(mapping.debitColumn))?.takeIf { it != 0.0 }
-                    val credit = AmountParser.parse(cell(mapping.creditColumn))?.takeIf { it != 0.0 }
+                    val debit = AmountParser.parse(cell(mapping.debitColumn), dot)?.takeIf { it != 0.0 }
+                    val credit = AmountParser.parse(cell(mapping.creditColumn), dot)?.takeIf { it != 0.0 }
                     when {
                         debit != null -> kotlin.math.abs(debit) to Direction.OUT
                         credit != null -> kotlin.math.abs(credit) to Direction.IN
@@ -167,7 +230,7 @@ object TableMapper {
                     }
                 }
                 AmountMode.SINGLE -> {
-                    val value = AmountParser.parse(cell(mapping.amountColumn))?.takeIf { it != 0.0 } ?: return@mapNotNull null
+                    val value = AmountParser.parse(cell(mapping.amountColumn), dot)?.takeIf { it != 0.0 } ?: return@mapNotNull null
                     val type = cell(mapping.typeColumn).lowercase().trim('.', ' ')
                     val direction = when {
                         mapping.typeColumn >= 0 && type in outWords -> Direction.OUT
@@ -178,7 +241,8 @@ object TableMapper {
                     kotlin.math.abs(value) to direction
                 }
             }
-            ParsedTransaction(date, description, amount, direction)
+            val balance = if (mapping.balanceColumn >= 0) AmountParser.parse(cell(mapping.balanceColumn), dot) else null
+            ParsedTransaction(date, description, amount, direction, balance)
         }
 
     /** Header text for each column, or "Column A", "Column B", … */

@@ -35,6 +35,8 @@ object SampleData {
                 note = note,
                 date = date,
                 createdAt = createdAt,
+                // Tagged so sample data can be told apart from real entries and removed.
+                importKey = "$SAMPLE_PREFIX${result.size}",
             )
         }
 

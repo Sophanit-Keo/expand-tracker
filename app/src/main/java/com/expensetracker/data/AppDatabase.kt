@@ -36,18 +36,32 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-@Database(entities = [Expense::class, CategoryRule::class], version = 3, exportSchema = true)
+/** v3 → v4: imported bank statements, and a link from each imported entry to its statement. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `expenses` ADD COLUMN `statementId` INTEGER")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `statements` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`fileName` TEXT NOT NULL, `importedAt` INTEGER NOT NULL, `periodStart` INTEGER NOT NULL, " +
+                "`periodEnd` INTEGER NOT NULL, `totalIn` REAL NOT NULL, `totalOut` REAL NOT NULL, " +
+                "`transactionCount` INTEGER NOT NULL, `openingBalance` REAL, `closingBalance` REAL)",
+        )
+    }
+}
+
+@Database(entities = [Expense::class, CategoryRule::class, BankStatement::class], version = 4, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun expenseDao(): ExpenseDao
     abstract fun categoryRuleDao(): CategoryRuleDao
+    abstract fun statementDao(): StatementDao
 
     companion object {
         const val NAME = "expenses.db"
 
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

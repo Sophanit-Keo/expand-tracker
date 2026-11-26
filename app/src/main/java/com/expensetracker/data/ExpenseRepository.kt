@@ -2,8 +2,14 @@ package com.expensetracker.data
 
 import kotlinx.coroutines.flow.Flow
 
-class ExpenseRepository(private val dao: ExpenseDao, private val rules: CategoryRuleDao) {
+class ExpenseRepository(
+    private val dao: ExpenseDao,
+    private val rules: CategoryRuleDao,
+    private val statementDao: StatementDao,
+) {
     val expenses: Flow<List<Expense>> = dao.observeAll()
+
+    val statements: Flow<List<BankStatement>> = statementDao.observeAll()
 
     suspend fun getAll(): List<Expense> = dao.getAll()
 
@@ -15,7 +21,24 @@ class ExpenseRepository(private val dao: ExpenseDao, private val rules: Category
 
     suspend fun addAll(expenses: List<Expense>) = dao.insertAll(expenses)
 
-    suspend fun clear() = dao.deleteAll()
+    suspend fun clear() {
+        dao.deleteAll()
+        statementDao.deleteAll()
+    }
+
+    suspend fun removeSampleData(): Int = dao.deleteSamples()
+
+    /**
+     * Records an imported statement (replacing an earlier import of the same file and period) and
+     * links the entries with [importKeys], whether imported now or before, to it.
+     */
+    suspend fun saveStatement(statement: BankStatement, importKeys: List<String>): Long {
+        statementDao.findSame(statement.periodStart, statement.periodEnd, statement.fileName)
+            .takeIf { it.isNotEmpty() }?.let { statementDao.delete(it) }
+        val id = statementDao.insert(statement)
+        importKeys.chunked(500).forEach { dao.linkToStatement(it, id) } // SQLite variable limit
+        return id
+    }
 
     suspend fun importKeys(): Set<String> = dao.importKeys().toSet()
 

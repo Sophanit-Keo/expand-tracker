@@ -43,7 +43,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.expensetracker.data.EntryType
 import com.expensetracker.ui.analytics.AnalyticsScreen
-import com.expensetracker.ui.analytics.AnalyticsTab
 import com.expensetracker.ui.analytics.AnalyticsTabs
 import com.expensetracker.ui.edit.EditExpenseScreen
 import com.expensetracker.ui.history.HistoryScreen
@@ -131,7 +130,7 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                     onImport = { navController.navigate(Routes.IMPORT) },
                     onAddIncome = { navController.navigate(Routes.addIncome()) },
                     onOpenCashFlow = {
-                        AnalyticsTabs.selected.value = AnalyticsTab.CASH_FLOW
+                        AnalyticsTabs.openCashFlow()
                         navController.navigateTopLevel(Routes.ANALYTICS)
                     },
                 )
@@ -174,6 +173,11 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                     onViewHistory = {
                         navController.popBackStack()
                         navController.navigateTopLevel(Routes.HISTORY)
+                    },
+                    onViewCashFlow = { month ->
+                        AnalyticsTabs.openCashFlow(month)
+                        navController.popBackStack()
+                        navController.navigateTopLevel(Routes.ANALYTICS)
                     },
                 )
             }

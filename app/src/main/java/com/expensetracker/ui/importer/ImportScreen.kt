@@ -32,7 +32,9 @@ import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.ViewColumn
@@ -73,6 +75,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -83,6 +86,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
+import com.expensetracker.data.EntryType
+import com.expensetracker.domain.StatementStatus
 import com.expensetracker.importer.AmountMode
 import com.expensetracker.importer.ColumnMapping
 import com.expensetracker.importer.DateParser
@@ -97,6 +102,8 @@ import com.expensetracker.ui.theme.Decrease
 import com.expensetracker.ui.theme.card
 import com.expensetracker.util.formatMoney
 import com.expensetracker.util.shortDate
+import java.time.LocalDate
+import java.time.YearMonth
 
 /** MIME types offered in the file picker; some file managers label CSV files as plain text or binary. */
 private val statementMimeTypes = arrayOf(
@@ -110,6 +117,7 @@ private val statementMimeTypes = arrayOf(
 fun ImportScreen(
     onClose: () -> Unit,
     onViewHistory: () -> Unit,
+    onViewCashFlow: (YearMonth) -> Unit,
     viewModel: ImportViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -154,9 +162,9 @@ fun ImportScreen(
         bottomBar = {
             when (state.step) {
                 ImportStep.REVIEW -> BottomAction(
-                    text = if (state.selectedRows.isEmpty()) "Select transactions to import"
+                    text = if (state.selectedRows.isEmpty()) "Save statement (nothing new to import)"
                     else "Import ${state.selectedRows.size} ${if (state.selectedRows.size == 1) "transaction" else "transactions"}",
-                    enabled = state.selectedRows.isNotEmpty(),
+                    enabled = state.rows.isNotEmpty(),
                     onClick = viewModel::import,
                     tag = "import_confirm",
                 )
@@ -186,8 +194,9 @@ fun ImportScreen(
                     onSelectAll = viewModel::selectAllVisible,
                     onMoneyInSelected = viewModel::setMoneyInSelected,
                     onPickCategory = { categoryRowId = it },
+                    onFlip = viewModel::flipDirection,
                 )
-                ImportStep.DONE -> DoneStep(state, onViewHistory, onClose)
+                ImportStep.DONE -> DoneStep(state, onViewHistory, onViewCashFlow, onClose, viewModel::removeSampleData)
                 ImportStep.ERROR -> ErrorStep(state.errorMessage.orEmpty(), pickFile)
             }
         }
@@ -396,35 +405,211 @@ private fun ErrorStep(message: String, onPick: () -> Unit) {
 }
 
 @Composable
-private fun DoneStep(state: ImportUiState, onViewHistory: () -> Unit, onClose: () -> Unit) {
+private fun DoneStep(
+    state: ImportUiState,
+    onViewHistory: () -> Unit,
+    onViewCashFlow: (YearMonth) -> Unit,
+    onClose: () -> Unit,
+    onRemoveSampleData: () -> Unit,
+) {
+    val status = state.statementStatus
     Column(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(48.dp))
-        IconBubble(Icons.Rounded.CheckCircle, size = 104, tint = Color.White, background = Decrease)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(32.dp))
+        IconBubble(Icons.Rounded.CheckCircle, size = 88, tint = Color.White, background = Decrease)
+        Spacer(Modifier.height(20.dp))
         Text(
-            "Imported ${state.importedCount} ${if (state.importedCount == 1) "transaction" else "transactions"}",
+            if (state.importedCount == 0) "Statement saved"
+            else "Imported ${state.importedCount} ${if (state.importedCount == 1) "transaction" else "transactions"}",
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            buildList {
+            if (state.importedCount == 0) "Everything in this file was already in the app."
+            else buildList {
                 if (state.importedOut > 0) add("−${formatMoney(state.importedOut, state.currency)} spending")
                 if (state.importedIn > 0) add("+${formatMoney(state.importedIn, state.currency)} income")
-            }.joinToString(" and ") + " added. Your charts, budget and cash flow are up to date.",
+            }.joinToString(" and ") + " added.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(28.dp))
-        Button(onClick = onViewHistory, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("View in History") }
+        if (status != null) {
+            Spacer(Modifier.height(20.dp))
+            CashFlowVsStatement(status, state.currency, onRemoveSampleData)
+        }
+        Spacer(Modifier.height(20.dp))
+        Button(
+            onClick = { onViewCashFlow(YearMonth.from(status?.statement?.periodEnd ?: LocalDate.now())) },
+            modifier = Modifier.fillMaxWidth().height(52.dp).testTag("view_cash_flow"),
+        ) { Text("View cash flow") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Done") }
+        OutlinedButton(onClick = onViewHistory, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("View in History") }
+        TextButton(onClick = onClose, modifier = Modifier.padding(top = 4.dp)) { Text("Done") }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** After importing: does the app's cash flow for the statement's dates equal the statement? */
+@Composable
+private fun CashFlowVsStatement(status: StatementStatus, currency: AppCurrency, onRemoveSampleData: () -> Unit) {
+    val st = status.statement
+    SectionCard(
+        title = "Cash flow vs statement",
+        subtitle = "${shortDate(st.periodStart)} – ${shortDate(st.periodEnd)}, ${st.periodEnd.year}",
+        action = { CheckBadge(if (status.matches) CheckState.OK else CheckState.PROBLEM, okText = "Matches", problemText = "Differs") },
+    ) {
+        CheckLine("Statement", "+" + formatMoney(st.totalIn, currency), "−" + formatMoney(st.totalOut, currency))
+        CheckLine("Cash flow", "+" + formatMoney(status.appIn, currency), "−" + formatMoney(status.appOut, currency))
+        if (st.openingBalance != null && st.closingBalance != null) {
+            CheckLine("Bank balance", formatMoney(st.openingBalance, currency) + " →", formatMoney(st.closingBalance, currency))
+        }
+        if (!status.matches) {
+            Spacer(Modifier.height(8.dp))
+            if (status.otherCount > 0) {
+                Note(
+                    "${status.otherCount} other ${if (status.otherCount == 1) "entry falls" else "entries fall"} in these dates" +
+                        (if (status.sampleCount > 0) " (${status.sampleCount} are sample data)" else " (added by hand or imported before)") +
+                        ", so the cash flow includes them too.",
+                )
+            }
+            if (status.missingIn > 0.005 || status.missingOut > 0.005) {
+                Note("Some statement rows weren't imported (left unticked as duplicates). Untick less, or add them by hand, to match.")
+            }
+            if (status.sampleCount > 0) {
+                TextButton(onClick = onRemoveSampleData, contentPadding = PaddingValues(0.dp)) { Text("Remove sample data") }
+            }
+        } else {
+            Note("Your cash flow for these dates now equals the statement.")
+        }
+    }
+}
+
+private enum class CheckState { OK, PROBLEM, NONE }
+
+@Composable
+private fun CheckBadge(state: CheckState, okText: String, problemText: String, noneText: String = "Nothing to check") {
+    val tint = when (state) {
+        CheckState.OK -> Decrease
+        CheckState.PROBLEM -> MaterialTheme.colorScheme.error
+        CheckState.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        Modifier
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.12f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            when (state) {
+                CheckState.OK -> Icons.Rounded.CheckCircle
+                CheckState.PROBLEM -> Icons.Rounded.ErrorOutline
+                CheckState.NONE -> Icons.Rounded.Info
+            },
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            when (state) {
+                CheckState.OK -> okText
+                CheckState.PROBLEM -> problemText
+                CheckState.NONE -> noneText
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = tint,
+        )
+    }
+}
+
+@Composable
+private fun CheckLine(label: String, first: String, second: String, ok: Boolean? = null, detail: String? = null) {
+    Column(Modifier.padding(vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
+            Text(first, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(second, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (ok != null) {
+                Icon(
+                    if (ok) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+                    contentDescription = if (ok) "Matches" else "Doesn't match",
+                    tint = if (ok) Decrease else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        if (detail != null) {
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 96.dp))
+        }
+    }
+}
+
+@Composable
+private fun Note(text: String) {
+    Row(Modifier.padding(top = 4.dp)) {
+        Text("•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Before importing: what was read from the file vs the statement's own totals and balances. */
+@Composable
+private fun StatementCheckCard(check: ImportCheck, currency: AppCurrency) {
+    val state = when {
+        check.hasProblem || check.unsure > 0 -> CheckState.PROBLEM
+        check.allMatch -> CheckState.OK
+        else -> CheckState.NONE
+    }
+    SectionCard(
+        title = "Statement check",
+        subtitle = "${shortDate(check.periodStart)} – ${shortDate(check.periodEnd)}, ${check.periodEnd.year}",
+        action = { CheckBadge(state, okText = "Adds up", problemText = "Check rows") },
+        modifier = Modifier.testTag("statement_check"),
+    ) {
+        val s = check.summary
+        CheckLine(
+            "Money in", "+" + formatMoney(check.foundIn, currency), "${check.countIn} ${if (check.countIn == 1) "row" else "rows"}",
+            ok = check.inMatches,
+            detail = s.printedIn?.takeIf { check.inMatches == false }?.let { "Statement total: +" + formatMoney(it, currency) },
+        )
+        CheckLine(
+            "Money out", "−" + formatMoney(check.foundOut, currency), "${check.countOut} ${if (check.countOut == 1) "row" else "rows"}",
+            ok = check.outMatches,
+            detail = s.printedOut?.takeIf { check.outMatches == false }?.let { "Statement total: −" + formatMoney(it, currency) },
+        )
+        if (s.openingBalance != null && s.closingBalance != null) {
+            CheckLine(
+                "Balance", formatMoney(s.openingBalance, currency) + " →", formatMoney(s.closingBalance, currency),
+                ok = check.balanceAddsUp,
+                detail = check.balanceDifference?.takeIf { check.balanceAddsUp == false }?.let { "Off by " + formatMoney(kotlin.math.abs(it), currency) },
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        when {
+            check.allMatch -> Note("Everything read from the file adds up to the statement's own totals and balances.")
+            !check.hasChecks -> Note("This file has no totals or balances to check against. Compare the money in and out above with your statement.")
+        }
+        if (s.fixedByBalance > 0) {
+            Note("${s.fixedByBalance} ${if (s.fixedByBalance == 1) "row was" else "rows were"} switched between in and out to follow the running balance.")
+        }
+        if (s.balanceBreaks > 0) {
+            Note("${s.balanceBreaks} ${if (s.balanceBreaks == 1) "balance doesn't" else "balances don't"} follow from the amounts, so those rows may be misread.")
+        }
+        if (check.unsure > 0) {
+            Note("${check.unsure} ${if (check.unsure == 1) "row isn't" else "rows aren't"} clearly money in or out. Tap ⇅ on a row to switch it.")
+        }
+        if (check.hasProblem) {
+            Note("If a row is the wrong way round, tap ⇅ on it. The check updates as you go.")
+        }
     }
 }
 
@@ -588,9 +773,16 @@ private fun ReviewStep(
     onSelectAll: (Boolean) -> Unit,
     onMoneyInSelected: (Boolean) -> Unit,
     onPickCategory: (Int) -> Unit,
+    onFlip: (Int) -> Unit,
 ) {
     val visible = state.visibleRows
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp)) {
+        state.check?.let { check ->
+            item {
+                StatementCheckCard(check, state.currency)
+                Spacer(Modifier.height(12.dp))
+            }
+        }
         item {
             SummaryCard(state)
             Spacer(Modifier.height(12.dp))
@@ -617,6 +809,7 @@ private fun ReviewStep(
                 shape = rowShape(index, visible.size),
                 onToggle = { onToggle(row.id) },
                 onPickCategory = { onPickCategory(row.id) },
+                onFlip = { onFlip(row.id) },
             )
         }
     }
@@ -685,7 +878,7 @@ private fun SummaryCard(state: ImportUiState) {
 }
 
 @Composable
-private fun ReviewRow(row: ImportRow, currency: AppCurrency, shape: Shape, onToggle: () -> Unit, onPickCategory: () -> Unit) {
+private fun ReviewRow(row: ImportRow, currency: AppCurrency, shape: Shape, onToggle: () -> Unit, onPickCategory: () -> Unit, onFlip: () -> Unit) {
     val disabled = row.flag == RowFlag.ALREADY_IMPORTED
     Row(
         Modifier
@@ -694,7 +887,7 @@ private fun ReviewRow(row: ImportRow, currency: AppCurrency, shape: Shape, onTog
             .clip(shape)
             .background(MaterialTheme.colorScheme.card)
             .clickable(enabled = !disabled, onClick = onToggle)
-            .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = row.selected, onCheckedChange = { onToggle() }, enabled = !disabled)
@@ -726,7 +919,15 @@ private fun ReviewRow(row: ImportRow, currency: AppCurrency, shape: Shape, onTog
             }
         }
         Spacer(Modifier.width(8.dp))
-        AmountText(row.amount, row.direction, currency)
+        AmountText(row.amount, if (row.type == EntryType.INCOME) Direction.IN else Direction.OUT, currency)
+        IconButton(onClick = onFlip, enabled = !disabled, modifier = Modifier.size(40.dp).testTag("flip_${row.id}")) {
+            Icon(
+                Icons.Rounded.SwapVert,
+                contentDescription = "Switch between money in and money out",
+                tint = if (row.flag == RowFlag.CHECK_DIRECTION) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 

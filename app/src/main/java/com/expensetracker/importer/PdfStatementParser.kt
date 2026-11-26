@@ -17,7 +17,10 @@ data class PdfParseResult(
     val transactions: List<ParsedTransaction>,
     /** True when a column header (Debit/Credit/Balance…) was found and used. */
     val usedColumnHeader: Boolean,
-)
+    val summary: StatementSummary = StatementSummary(),
+) {
+    val read: StatementRead get() = StatementRead(transactions, summary)
+}
 
 /**
  * Finds transactions in the text of a PDF statement. A transaction line starts with a date and ends
@@ -42,8 +45,9 @@ object PdfStatementParser {
     )
     private val headerContext = setOf("date", "description", "details", "particulars", "narration", "transaction", "remarks", "reference")
 
-    private val openingBalance = Regex("""(?i)(opening|beginning|previous|starting)\s+balance|balance\s+(brought\s+)?(forward|b/?f)|brought\s+forward""")
-    private val nonTransaction = Regex("""(?i)^(total|closing balance|ending balance|balance carried|carried forward|sub-?total)""")
+    private val openingBalance = StatementWords.openingBalance
+    private val nonTransaction = Regex("""(?i)^(total|closing balance|ending balance|balance carried|carried forward|sub-?total|grand total)""")
+    private val timeToken = Regex("""(?i)^\d{1,2}:\d{2}(:\d{2})?$|^(am|pm)$""")
     private val markers = setOf("DR", "CR", "Dr", "Cr", "D", "C")
     private val currencyCodes = Regex("""^([A-Z]{3}|[$€£¥៛฿₫₩])$""")
     private val fullYear = Regex("""(19|20)\d{2}""")
@@ -56,6 +60,9 @@ object PdfStatementParser {
 
     /** Dominant date layout of the statement (so 03/11 is read consistently as 3 Nov or as Mar 11). */
     private var preferredFormat: String? = null
+
+    /** The statement writes thousands as "40.000" (no decimals). */
+    private var dotThousands = false
 
     private fun detectDateFormat(lines: List<PdfLine>): String? {
         val leading = lines.mapNotNull { line ->
@@ -80,9 +87,13 @@ object PdfStatementParser {
     fun parse(lines: List<PdfLine>): PdfParseResult {
         val reference = referenceDate(lines)
         preferredFormat = detectDateFormat(lines)
+        dotThousands = AmountParser.usesDotThousands(lines.flatMap { l -> l.words.map { it.text }.filter(AmountParser::isNumberToken) })
         var columns = emptyList<Column>()
         var usedHeader = false
         var openingBalanceValue: Double? = null
+        var closingBalanceValue: Double? = null
+        var printedIn: Double? = null
+        var printedOut: Double? = null
         val raw = mutableListOf<RawTx>()
 
         for (line in lines) {
@@ -94,9 +105,24 @@ object PdfStatementParser {
             val text = line.text
             if (dateMatch == null) {
                 if (openingBalance.containsMatchIn(text)) {
-                    trailingAmounts(words, 0, columns).lastOrNull()?.let { openingBalanceValue = it.value }
-                    continue
+                    amountAfter(words, openingBalance)?.let { openingBalanceValue = it }
                 }
+                if (StatementWords.closingBalance.containsMatchIn(text)) {
+                    amountAfter(words, StatementWords.closingBalance)?.let { closingBalanceValue = it }
+                }
+                amountAfter(words, StatementWords.totalIn)?.let { printedIn = it }
+                amountAfter(words, StatementWords.totalOut)?.let { printedOut = it }
+                // A "Total" row under the Debit/Credit columns.
+                if (StatementWords.total.containsMatchIn(text) && columns.isNotEmpty()) {
+                    trailingAmounts(words, 0, columns).forEach { m ->
+                        when (nearestColumn(m.word, columns)) {
+                            Col.DEBIT -> if (printedOut == null) printedOut = abs(m.value)
+                            Col.CREDIT -> if (printedIn == null) printedIn = abs(m.value)
+                            else -> Unit
+                        }
+                    }
+                }
+                if (openingBalance.containsMatchIn(text) || StatementWords.closingBalance.containsMatchIn(text) || StatementWords.total.containsMatchIn(text)) continue
                 // A wrapped description: no date, no amounts, right under a transaction.
                 val last = raw.lastOrNull()
                 if (last != null && last.page == line.page && last.continuationLines < 2 &&
@@ -116,6 +142,10 @@ object PdfStatementParser {
                 trailingAmounts(rest, 0, columns).lastOrNull()?.let { openingBalanceValue = it.value }
                 continue
             }
+            if (StatementWords.closingBalance.containsMatchIn(restText)) {
+                trailingAmounts(rest, 0, columns).lastOrNull()?.let { closingBalanceValue = it.value }
+                continue
+            }
             if (nonTransaction.containsMatchIn(restText)) continue
             val amounts = trailingAmounts(rest, 0, columns)
             if (amounts.isEmpty()) continue
@@ -125,7 +155,27 @@ object PdfStatementParser {
             if (columns.isNotEmpty()) usedHeader = true
         }
 
-        return PdfParseResult(resolve(raw, openingBalanceValue), usedHeader)
+        val summary = StatementSummary(
+            printedIn = printedIn,
+            printedOut = printedOut,
+            openingBalance = openingBalanceValue,
+            closingBalance = closingBalanceValue,
+        )
+        val checked = BalanceCheck.apply(StatementRead(resolve(raw), summary))
+        return PdfParseResult(checked.transactions, usedHeader, checked.summary)
+    }
+
+    /** The first amount printed after a label such as "Total money in" or "Closing balance". */
+    private fun amountAfter(words: List<PdfWord>, label: Regex): Double? {
+        val text = words.joinToString(" ") { it.text }
+        val match = label.find(text) ?: return null
+        var position = 0
+        words.forEach { w ->
+            val start = position
+            position += w.text.length + 1
+            if (start >= match.range.last && AmountParser.looksLikeMoney(w.text)) return AmountParser.parse(w.text, dotThousands)
+        }
+        return null
     }
 
     /** The latest full date printed anywhere: used to give a year to dates like "26 Nov". */
@@ -150,9 +200,22 @@ object PdfStatementParser {
         return first.first to used
     }
 
+    /**
+     * A date made of up to 4 words, optionally followed by a time ("10:32", "10:32 AM") that is
+     * skipped. Time words are never part of the candidate itself: otherwise "15/11/2026 10:32 Coffee
+     * 12.50" would read as a date and swallow the description and amount.
+     */
     private fun leadingDateAt(words: List<PdfWord>, start: Int, reference: LocalDate): Pair<LocalDate, Int>? {
+        val match = leadingDateWords(words, start, reference) ?: return null
+        var used = match.second
+        while (start + used < words.size && used - match.second < 2 && timeToken.matches(words[start + used].text)) used++
+        return match.first to used
+    }
+
+    private fun leadingDateWords(words: List<PdfWord>, start: Int, reference: LocalDate): Pair<LocalDate, Int>? {
         for (n in 4 downTo 1) {
             if (start + n > words.size) continue
+            if (words.subList(start, start + n).any { timeToken.matches(it.text) }) continue
             val candidate = words.subList(start, start + n).joinToString(" ") { it.text }
             if (candidate.length < 4 && n == 1) continue
             if (candidate.none(Char::isDigit)) continue
@@ -198,7 +261,7 @@ object PdfStatementParser {
                 t in markers -> pendingMarker = t
                 currencyCodes.matches(t) -> Unit
                 AmountParser.looksLikeMoney(t) || (columns.isNotEmpty() && underMoneyColumn(words[i], columns) && AmountParser.parse(t) != null && t.any(Char::isDigit) && t.length <= 15) -> {
-                    var value = AmountParser.parse(t) ?: break
+                    var value = AmountParser.parse(t, dotThousands) ?: break
                     if (pendingMarker?.startsWith("D") == true) value = -abs(value)
                     result.add(0, Money(value, words[i], pendingMarker))
                     pendingMarker = null
@@ -216,67 +279,43 @@ object PdfStatementParser {
     private fun nearestColumn(word: PdfWord, columns: List<Column>): Col? =
         columns.minByOrNull { minOf(abs(word.center - it.center), abs(word.x1 - it.x1), abs(word.x0 - it.x0)) }?.role
 
-    private fun resolve(raw: List<RawTx>, opening: Double?): List<ParsedTransaction> {
-        data class Resolved(val tx: RawTx, val amount: Double, var direction: Direction, val balance: Double?, val explicit: Boolean)
-
-        val resolved = raw.map { tx ->
-            var amount: Double? = null
-            var direction = Direction.UNKNOWN
-            var balance: Double? = null
-            var explicit = false
-            if (tx.columns.isNotEmpty()) {
-                for (m in tx.amounts) {
-                    when (nearestColumn(m.word, tx.columns)) {
-                        Col.DEBIT -> if (m.value != 0.0) { amount = abs(m.value); direction = Direction.OUT; explicit = true }
-                        Col.CREDIT -> if (m.value != 0.0) { amount = abs(m.value); direction = Direction.IN; explicit = true }
-                        Col.AMOUNT -> if (amount == null) amount = m.value
-                        Col.BALANCE -> balance = m.value
-                        null -> Unit
-                    }
+    private fun resolve(raw: List<RawTx>): List<ParsedTransaction> = raw.mapNotNull { tx ->
+        var amount: Double? = null
+        var direction = Direction.UNKNOWN
+        var balance: Double? = null
+        var explicit = false
+        if (tx.columns.isNotEmpty()) {
+            for (m in tx.amounts) {
+                when (nearestColumn(m.word, tx.columns)) {
+                    Col.DEBIT -> if (m.value != 0.0) { amount = abs(m.value); direction = Direction.OUT; explicit = true }
+                    Col.CREDIT -> if (m.value != 0.0) { amount = abs(m.value); direction = Direction.IN; explicit = true }
+                    Col.AMOUNT -> if (amount == null) amount = m.value
+                    Col.BALANCE -> balance = m.value
+                    null -> Unit
                 }
             }
-            if (amount == null) {
-                val nonZero = tx.amounts.filter { it.value != 0.0 || it == tx.amounts.last() }
-                if (nonZero.size >= 2) {
-                    balance = nonZero.last().value
-                    amount = nonZero[nonZero.size - 2].value
-                } else {
-                    amount = nonZero.firstOrNull()?.value
-                }
-            }
-            val value = amount ?: return@map null
-            val marker = tx.amounts.firstOrNull { abs(it.value) == abs(value) }?.marker
-            if (!explicit) {
-                when {
-                    marker?.startsWith("D") == true || value < 0 -> { direction = Direction.OUT; explicit = true }
-                    marker?.startsWith("C") == true -> { direction = Direction.IN; explicit = true }
-                }
-            }
-            Resolved(tx, abs(value), direction, balance, explicit)
-        }.filterNotNull()
-
-        // Balance changes: walk in date order (statements may list newest first).
-        val chronological = if (resolved.size > 1 && resolved.first().tx.date > resolved.last().tx.date) resolved.reversed() else resolved
-        var previous = opening
-        for (r in chronological) {
-            val bal = r.balance
-            if (r.direction == Direction.UNKNOWN && previous != null && bal != null) {
-                r.direction = when {
-                    abs(previous - r.amount - bal) < 0.011 -> Direction.OUT
-                    abs(previous + r.amount - bal) < 0.011 -> Direction.IN
-                    else -> Direction.UNKNOWN
-                }
-            }
-            if (bal != null) previous = bal
         }
-
-        return resolved.map { r ->
-            val direction = if (r.direction != Direction.UNKNOWN) r.direction else when {
-                inWords.containsMatchIn(r.tx.description) -> Direction.IN
-                outWords.containsMatchIn(r.tx.description) -> Direction.OUT
+        if (amount == null) {
+            val nonZero = tx.amounts.filter { it.value != 0.0 || it == tx.amounts.last() }
+            if (nonZero.size >= 2) {
+                balance = nonZero.last().value
+                amount = nonZero[nonZero.size - 2].value
+            } else {
+                amount = nonZero.firstOrNull()?.value
+            }
+        }
+        val value = amount ?: return@mapNotNull null
+        if (!explicit) {
+            val marker = tx.amounts.firstOrNull { abs(it.value) == abs(value) }?.marker
+            direction = when {
+                marker?.startsWith("D") == true || value < 0 -> Direction.OUT
+                marker?.startsWith("C") == true -> Direction.IN
+                // Words are the weakest evidence; the running balance (BalanceCheck) can still correct them.
+                inWords.containsMatchIn(tx.description) -> Direction.IN
+                outWords.containsMatchIn(tx.description) -> Direction.OUT
                 else -> Direction.UNKNOWN
             }
-            ParsedTransaction(r.tx.date, r.tx.description, r.amount, direction)
         }
+        ParsedTransaction(tx.date, tx.description, abs(value), direction, balance)
     }
 }

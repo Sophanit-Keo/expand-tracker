@@ -110,7 +110,7 @@ class CsvAndTableTest {
 
         val tx = TableMapper.apply(rows, mapping)
         assertEquals(3, tx.size)
-        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 3), "STARBUCKS STORE 1234", 5.75, Direction.OUT), tx[0])
+        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 3), "STARBUCKS STORE 1234", 5.75, Direction.OUT, 1000.25), tx[0])
         assertEquals(Direction.IN, tx[1].direction)
         assertEquals(2500.0, tx[1].amount, 0.0)
         assertEquals("AMAZON.COM*AB12CD, SEATTLE", tx[2].description)
@@ -126,8 +126,8 @@ class CsvAndTableTest {
         assertEquals(AmountMode.DEBIT_CREDIT, mapping.amountMode)
         assertEquals(1, mapping.descriptionColumn)
         val tx = TableMapper.apply(rows, mapping)
-        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 26), "Grocery Store", 1234.56, Direction.OUT), tx[0])
-        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 27), "Salary", 3000.0, Direction.IN), tx[1])
+        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 26), "Grocery Store", 1234.56, Direction.OUT, 5000.0), tx[0])
+        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 27), "Salary", 3000.0, Direction.IN, 8000.0), tx[1])
     }
 
     @Test
@@ -197,7 +197,7 @@ class PdfStatementParserTest {
         assertTrue(result.usedColumnHeader)
         val tx = result.transactions
         assertEquals(3, tx.size)
-        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 3), "KFC AEON MALL", 12.5, Direction.OUT), tx[0])
+        assertEquals(ParsedTransaction(LocalDate.of(2026, 11, 3), "KFC AEON MALL", 12.5, Direction.OUT, 487.5), tx[0])
         assertEquals(Direction.IN, tx[1].direction)
         assertEquals(1000.0, tx[1].amount, 0.0)
         // Plain-looking number under the Money Out column is still read, and the wrapped line is joined.
