@@ -63,8 +63,13 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
 ./gradlew installDebug        # install a debug build on a connected device
 ```
 
-> The release build is signed with the debug key so it installs directly. Before you publish to Google Play,
-> create your own keystore and replace `signingConfig` in `app/build.gradle.kts`.
+> Without an upload key, the release build is signed with the debug key so it installs directly on your phone.
+
+## Publish on Google Play
+
+Everything is set up: release signing from `keystore.properties` (or GitHub secrets), `./gradlew bundleRelease`
+for the App Bundle, store graphics in [`docs/play-store/`](docs/play-store/), and a
+[privacy policy](docs/privacy-policy.md). Follow the step-by-step guide in **[docs/PUBLISHING.md](docs/PUBLISHING.md)**.
 
 ## Tech stack
 

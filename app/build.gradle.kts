@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -8,6 +9,17 @@ plugins {
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.room)
 }
+
+/*
+ * Upload key for Google Play. Read from keystore.properties in the project root (never committed,
+ * see docs/PUBLISHING.md) or, on CI, from UPLOAD_* environment variables. Without it, release builds
+ * fall back to the debug key: fine for installing on your own phone, rejected by Google Play.
+ */
+val keystoreProperties = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun signingValue(property: String, env: String): String? = keystoreProperties.getProperty(property) ?: System.getenv(env)
+val uploadStoreFile: String? = signingValue("storeFile", "UPLOAD_STORE_FILE")
 
 android {
     namespace = "com.expensetracker"
@@ -21,6 +33,17 @@ android {
         versionName = "1.3.1"
     }
 
+    signingConfigs {
+        if (uploadStoreFile != null) {
+            create("upload") {
+                storeFile = rootProject.file(uploadStoreFile)
+                storePassword = signingValue("storePassword", "UPLOAD_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "UPLOAD_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "UPLOAD_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -29,9 +52,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Signed with the debug key so the release APK can be installed directly on your
-            // phone. Replace this with your own keystore before publishing to Google Play.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (uploadStoreFile != null) {
+                signingConfigs.getByName("upload")
+            } else {
+                logger.warn("Release build is signed with the DEBUG key. Google Play won't accept it; see docs/PUBLISHING.md.")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

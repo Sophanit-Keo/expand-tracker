@@ -33,7 +33,12 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w400dp-h880dp-xxhdpi")
-abstract class AppScreenshotTest(private val suffix: String) {
+abstract class AppScreenshotTest(
+    private val suffix: String,
+    private val directory: String = "../docs/screenshots",
+    /** When set, only these screens are saved (e.g. the Play Store set). */
+    private val only: Set<String>? = null,
+) {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
 
@@ -52,7 +57,8 @@ abstract class AppScreenshotTest(private val suffix: String) {
     private fun shoot(name: String) {
         compose.mainClock.advanceTimeBy(2_000)
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("../docs/screenshots/$name$suffix.png")
+        if (only != null && name !in only) return
+        compose.onRoot().captureRoboImage("$directory/$name$suffix.png")
     }
 
     private fun open(route: String, waitForText: String) {
@@ -106,6 +112,14 @@ abstract class AppScreenshotTest(private val suffix: String) {
 }
 
 class LightScreenshotTest : AppScreenshotTest("")
+
+/** Google Play phone screenshots: 1233×2193 (16:9, under Play's 2:1 limit). */
+@Config(qualifiers = "w411dp-h731dp-xxhdpi")
+class PlayStoreScreenshotTest : AppScreenshotTest(
+    suffix = "",
+    directory = "../docs/play-store/phone",
+    only = setOf("1_home", "9_cash_flow", "9b_cash_flow_charts", "2_analytics", "2b_analytics_charts", "3_history", "4_add_expense", "4b_add_income"),
+)
 
 @Config(qualifiers = "+night")
 class DarkScreenshotTest : AppScreenshotTest("_dark")

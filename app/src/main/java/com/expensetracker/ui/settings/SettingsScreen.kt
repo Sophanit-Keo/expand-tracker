@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteForever
@@ -78,7 +79,7 @@ import com.expensetracker.util.formatMoney
 import com.expensetracker.util.sanitizeAmountInput
 import kotlinx.coroutines.launch
 
-private enum class SettingsDialog { CURRENCY, BUDGET, THEME, CLEAR, CLEAR_IMPORTED }
+private enum class SettingsDialog { CURRENCY, BUDGET, THEME, CLEAR, CLEAR_IMPORTED, LICENSES }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -233,6 +234,13 @@ fun SettingsScreen(
                         subtitle = "Version ${BuildConfig.VERSION_NAME} · your data stays on this device",
                         onClick = null,
                     )
+                    GroupDivider()
+                    SettingsItem(
+                        icon = Icons.Rounded.Code,
+                        title = "Open-source licenses",
+                        subtitle = "Libraries this app is built with",
+                        onClick = { dialog = SettingsDialog.LICENSES },
+                    )
                 }
             }
         }
@@ -291,6 +299,21 @@ fun SettingsScreen(
                 }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+        )
+        SettingsDialog.LICENSES -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Open-source licenses") },
+            text = {
+                LazyColumn(Modifier.heightIn(max = 460.dp)) {
+                    items(openSourceLibraries) { (name, notice) ->
+                        Column(Modifier.padding(vertical = 8.dp)) {
+                            Text(name, style = MaterialTheme.typography.titleSmall)
+                            Text(notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Close") } },
         )
         null -> Unit
     }
@@ -427,3 +450,14 @@ private fun BudgetDialog(current: Double, currency: AppCurrency, onSave: (Double
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+private const val APACHE_2 = "Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0"
+
+/** Third-party software shipped in the app, with the notices their licenses ask for. */
+private val openSourceLibraries = listOf(
+    "PdfBox-Android" to "Copyright © Tom Roush and contributors. A port of Apache PDFBox, which includes " +
+        "software developed at The Apache Software Foundation (https://www.apache.org/). $APACHE_2",
+    "Android Jetpack (AndroidX): Compose, Material 3, Room, Navigation, Lifecycle, DataStore" to "Copyright © The Android Open Source Project. $APACHE_2",
+    "Kotlin and kotlinx.coroutines" to "Copyright © JetBrains s.r.o. and Kotlin Programming Language contributors. $APACHE_2",
+    "Material Symbols icons" to "Copyright © Google LLC. $APACHE_2",
+)
