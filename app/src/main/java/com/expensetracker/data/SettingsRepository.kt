@@ -50,6 +50,8 @@ data class UserSettings(
     val monthlyBudget: Double = 0.0,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = false,
+    /** First-run setup finished (or skipped because there was already data). */
+    val onboarded: Boolean = false,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -60,6 +62,7 @@ class SettingsRepository(private val context: Context) {
         val budget = doublePreferencesKey("monthly_budget")
         val theme = stringPreferencesKey("theme_mode")
         val dynamicColor = booleanPreferencesKey("dynamic_color")
+        val onboarded = booleanPreferencesKey("onboarded")
     }
 
     val settings: Flow<UserSettings> = context.dataStore.data.map { it.toSettings() }
@@ -72,11 +75,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setDynamicColor(enabled: Boolean) = context.dataStore.edit { it[Keys.dynamicColor] = enabled }
 
+    suspend fun setOnboarded(done: Boolean = true) = context.dataStore.edit { it[Keys.onboarded] = done }
+
     private fun Preferences.toSettings() = UserSettings(
         currency = enumValueOrDefault(this[Keys.currency], AppCurrency.USD),
         monthlyBudget = this[Keys.budget] ?: 0.0,
         themeMode = enumValueOrDefault(this[Keys.theme], ThemeMode.SYSTEM),
         dynamicColor = this[Keys.dynamicColor] ?: false,
+        onboarded = this[Keys.onboarded] ?: false,
     )
 }
 

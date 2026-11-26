@@ -1,7 +1,9 @@
 package com.expensetracker.ui.edit
 
-import com.expensetracker.ui.theme.card
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +23,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -29,8 +33,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -45,8 +51,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -67,7 +73,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -78,11 +86,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
 import com.expensetracker.ui.AppViewModelProvider
+import com.expensetracker.ui.Prefill
 import com.expensetracker.ui.components.color
 import com.expensetracker.ui.components.icon
+import com.expensetracker.ui.theme.card
+import com.expensetracker.util.formatMoney
 import com.expensetracker.util.friendlyDate
 import java.time.Instant
 import java.time.LocalDate
@@ -92,13 +104,16 @@ import java.time.ZoneOffset
 @Composable
 fun EditExpenseScreen(
     onDone: () -> Unit,
+    onDuplicate: (Prefill) -> Unit = {},
     viewModel: EditExpenseViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val amountFocus = remember { FocusRequester() }
+    val noteFocus = remember { FocusRequester() }
 
     LaunchedEffect(state.done) { if (state.done) onDone() }
     LaunchedEffect(state.loading) {
@@ -116,7 +131,10 @@ fun EditExpenseScreen(
                     IconButton(onClick = onDone) { Icon(Icons.Rounded.Close, contentDescription = "Close") }
                 },
                 actions = {
-                    if (state.isEditing) {
+                    if (state.isEditing && !state.loading) {
+                        IconButton(onClick = { viewModel.duplicate()?.let(onDuplicate) }) {
+                            Icon(Icons.Rounded.ContentCopy, contentDescription = "Duplicate as a new entry")
+                        }
                         IconButton(onClick = { confirmDelete = true }) {
                             Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete")
                         }
@@ -128,7 +146,11 @@ fun EditExpenseScreen(
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Button(
-                    onClick = viewModel::save,
+                    onClick = {
+                        if (state.amount != null) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                        else haptics.performHapticFeedback(HapticFeedbackType.Reject)
+                        viewModel.save()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
@@ -174,13 +196,55 @@ fun EditExpenseScreen(
                 isError = state.showAmountError,
                 onChange = viewModel::onAmountChange,
                 modifier = Modifier.focusRequester(amountFocus),
+                onNext = { noteFocus.requestFocus() },
             )
 
-            Spacer(Modifier.height(24.dp))
-            Text("Category", style = MaterialTheme.typography.titleSmall)
+            // Things you enter often: one tap fills everything in.
+            AnimatedVisibility(visible = !state.isEditing && state.suggestions.isNotEmpty()) {
+                Column {
+                    Spacer(Modifier.height(16.dp))
+                    Text("Quick fill", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(state.suggestions, key = { it.note + it.category }) { fill ->
+                            QuickFillChip(fill, state.currency) {
+                                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                viewModel.applySuggestion(fill)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = state.note,
+                onValueChange = viewModel::onNoteChange,
+                modifier = Modifier.fillMaxWidth().focusRequester(noteFocus),
+                label = { Text(if (state.type == EntryType.INCOME) "Where from? (optional)" else "What for? (optional)") },
+                placeholder = { Text(if (state.type == EntryType.INCOME) "e.g. Salary, Freelance job" else "e.g. Lunch, Grab, Netflix") },
+                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Notes, contentDescription = null) },
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            )
+
+            Spacer(Modifier.height(20.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Category", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                AnimatedVisibility(visible = state.categoryAuto, enter = fadeIn(), exit = fadeOut()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Picked from your note", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
             Spacer(Modifier.height(12.dp))
             CategoryGrid(categories = Category.of(state.type), selected = state.category, onSelect = {
                 focusManager.clearFocus()
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 viewModel.onCategoryChange(it)
             })
 
@@ -191,20 +255,6 @@ fun EditExpenseScreen(
                 date = state.date,
                 onPick = { showDatePicker = true },
                 onQuickPick = viewModel::onDateChange,
-            )
-
-            Spacer(Modifier.height(24.dp))
-            OutlinedTextField(
-                value = state.note,
-                onValueChange = viewModel::onNoteChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Note (optional)") },
-                placeholder = { Text("e.g. Lunch with friends") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Notes, contentDescription = null) },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
             )
             Spacer(Modifier.height(24.dp))
         }
@@ -243,6 +293,7 @@ fun EditExpenseScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     viewModel.delete()
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
@@ -260,6 +311,7 @@ private fun AmountInput(
     isError: Boolean,
     onChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onNext: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     val border by animateColorAsState(if (isError) colors.error else Color.Transparent, label = "amountBorder")
@@ -291,6 +343,7 @@ private fun AmountInput(
                     keyboardType = if (decimals == 0) KeyboardType.Number else KeyboardType.Decimal,
                     imeAction = ImeAction.Next,
                 ),
+                keyboardActions = KeyboardActions(onNext = { onNext() }),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (text.isEmpty()) {
@@ -397,5 +450,28 @@ private fun DateRow(date: LocalDate, onPick: () -> Unit, onQuickPick: (LocalDate
                 shape = CircleShape,
             )
         }
+    }
+}
+
+@Composable
+private fun QuickFillChip(fill: QuickFill, currency: AppCurrency, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .clip(CircleShape)
+            .background(fill.category.color.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(start = 8.dp, end = 14.dp, top = 8.dp, bottom = 8.dp)
+            .testTag("quick_fill"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(fill.category.icon, contentDescription = null, tint = fill.category.color, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(fill.note, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        Text(
+            " · " + formatMoney(fill.amount, currency),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
     }
 }

@@ -30,11 +30,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -61,6 +61,7 @@ import com.expensetracker.domain.CategoryTotal
 import com.expensetracker.domain.PeriodSummary
 import com.expensetracker.domain.PeriodType
 import com.expensetracker.ui.AppViewModelProvider
+import com.expensetracker.ui.Prefill
 import com.expensetracker.ui.charts.BarChart
 import com.expensetracker.ui.charts.DonutChart
 import com.expensetracker.ui.charts.DonutSlice
@@ -71,6 +72,7 @@ import com.expensetracker.ui.components.OtherSliceColor
 import com.expensetracker.ui.components.PeriodNavigator
 import com.expensetracker.ui.components.RoundedProgressBar
 import com.expensetracker.ui.components.SectionCard
+import com.expensetracker.ui.components.animatedAmount
 import com.expensetracker.ui.components.color
 import com.expensetracker.ui.theme.Decrease
 import com.expensetracker.ui.theme.Increase
@@ -85,6 +87,7 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen(
+    onLogRecurring: (Prefill) -> Unit,
     onAddIncome: () -> Unit,
     onImport: () -> Unit,
     viewModel: AnalyticsViewModel = viewModel(factory = AppViewModelProvider.Factory),
@@ -135,6 +138,7 @@ fun AnalyticsScreen(
             onAddIncome = onAddIncome,
             onImport = onImport,
             onRemoveSampleData = viewModel::removeSampleData,
+            onLogRecurring = onLogRecurring,
         )
     }
 }
@@ -149,6 +153,7 @@ fun AnalyticsContent(
     onAddIncome: () -> Unit = {},
     onImport: () -> Unit = {},
     onRemoveSampleData: () -> Unit = {},
+    onLogRecurring: (Prefill) -> Unit = {},
 ) {
     val summary = state.summary
     val listState = rememberLazyListState()
@@ -177,7 +182,7 @@ fun AnalyticsContent(
 
         if (summary == null) return@LazyColumn
         if (state.tab == AnalyticsTab.CASH_FLOW) {
-            cashFlowItems(state, onAddIncome, onImport, onRemoveSampleData)
+            cashFlowItems(state, onAddIncome, onImport, onRemoveSampleData, onLogRecurring)
             return@LazyColumn
         }
 
@@ -238,7 +243,7 @@ private fun SummaryCard(summary: PeriodSummary, state: AnalyticsUiState) {
     SectionCard {
         Text("Total spent", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
-        Text(formatMoney(summary.total, state.currency), style = MaterialTheme.typography.displaySmall)
+        Text(formatMoney(animatedAmount(summary.total), state.currency), style = MaterialTheme.typography.displaySmall)
         Spacer(Modifier.height(8.dp))
         ChangeChip(summary.changePercent, comparedTo = state.comparedTo)
         Spacer(Modifier.height(20.dp))

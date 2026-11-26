@@ -44,7 +44,11 @@ import java.time.LocalDate
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w400dp-h880dp-xxhdpi")
 class ImportFlowTest {
-    @get:Rule
+    /** Runs before the activity starts, so first-run setup never covers the screen. */
+    @get:Rule(order = 0)
+    val skipSetup = SkipFirstRunSetup()
+
+    @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
 
     private val container get() = ApplicationProvider.getApplicationContext<ExpenseApp>().container

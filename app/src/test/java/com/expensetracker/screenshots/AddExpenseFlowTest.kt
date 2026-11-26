@@ -1,5 +1,6 @@
 package com.expensetracker.screenshots
 
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -28,7 +29,11 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], qualifiers = "w400dp-h880dp")
 class AddExpenseFlowTest {
-    @get:Rule
+    /** Runs before the activity starts, so first-run setup never covers the screen. */
+    @get:Rule(order = 0)
+    val skipSetup = SkipFirstRunSetup()
+
+    @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
 
     private val container get() = ApplicationProvider.getApplicationContext<ExpenseApp>().container
@@ -67,6 +72,8 @@ class AddExpenseFlowTest {
 
     @Test
     fun addIncomeIsStoredAsIncome() {
+        // The app composes once settings have loaded (behind the splash screen).
+        compose.waitUntilAtLeastOneExists(hasTestTag("add_expense"), timeoutMillis = 10_000)
         compose.onNode(hasTestTag("add_expense")).performClick()
         compose.waitUntilAtLeastOneExists(hasText("New expense"), timeoutMillis = 10_000)
         compose.onNode(hasTestTag("type_income")).performClick()
@@ -83,8 +90,9 @@ class AddExpenseFlowTest {
 
     @Test
     fun saveWithoutAmountShowsError() {
+        compose.waitUntilAtLeastOneExists(hasTestTag("add_expense"), timeoutMillis = 10_000)
         compose.onNode(hasTestTag("add_expense")).performClick()
-        compose.waitUntilAtLeastOneExists(hasText("New expense"), timeoutMillis = 10_000)
+        compose.waitUntilAtLeastOneExists(hasText("Save expense") and isEnabled(), timeoutMillis = 10_000)
         compose.onNodeWithText("Save expense").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Enter an amount greater than zero"), timeoutMillis = 5_000)
         assertEquals(0, runBlocking { container.expenseRepository.getAll() }.size)

@@ -1,6 +1,6 @@
 package com.expensetracker.ui.history
 
-import com.expensetracker.ui.theme.card
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,7 +54,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -70,6 +72,7 @@ import com.expensetracker.ui.components.ExpenseRow
 import com.expensetracker.ui.components.PeriodNavigator
 import com.expensetracker.ui.components.icon
 import com.expensetracker.ui.theme.CashInText
+import com.expensetracker.ui.theme.card
 import com.expensetracker.util.formatMoney
 import com.expensetracker.util.friendlyDate
 import kotlinx.coroutines.launch
@@ -88,6 +91,7 @@ fun HistoryScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val haptics = LocalHapticFeedback.current
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -118,12 +122,23 @@ fun HistoryScreen(
             ),
         ) {
             item {
-                PeriodNavigator(
-                    label = state.month.format(monthFormatter),
-                    onPrevious = viewModel::previousMonth,
-                    onNext = viewModel::nextMonth,
-                    canGoNext = state.canGoNext,
-                )
+                AnimatedContent(targetState = state.searchingAllMonths, label = "periodHeader") { searching ->
+                    if (searching) {
+                        Text(
+                            "Results from all months",
+                            style = MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                        )
+                    } else {
+                        PeriodNavigator(
+                            label = state.month.format(monthFormatter),
+                            onPrevious = viewModel::previousMonth,
+                            onNext = viewModel::nextMonth,
+                            canGoNext = state.canGoNext,
+                        )
+                    }
+                }
                 Text(
                     buildList {
                         if (state.spent > 0 || state.received == 0.0) add("−${formatMoney(state.spent, state.currency)} out")
@@ -151,7 +166,8 @@ fun HistoryScreen(
                     EmptyState(
                         icon = Icons.Rounded.SearchOff,
                         title = if (state.isFiltered) "No matches" else "Nothing here yet",
-                        message = if (state.isFiltered) "Try a different search or category."
+                        message = if (state.searchingAllMonths) "Nothing matches “${state.query.trim()}” in any month."
+                        else if (state.isFiltered) "Try a different search or category."
                         else "No expenses recorded in ${state.month.format(monthFormatter)}.",
                     )
                 }
@@ -195,6 +211,7 @@ fun HistoryScreen(
                             shape = groupShape(index, group.items.size),
                             onClick = { onOpenExpense(expense.id) },
                             onDelete = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.delete(expense)
                                 scope.launch {
                                     snackbar.currentSnackbarData?.dismiss()

@@ -26,7 +26,8 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
 
 ## Features
 
-- **Fast entry**: switch between Expense and Income, big amount field, color-coded categories (12 for spending, 7 for income: Salary, Business, Interest & investments, Refunds, Gifts received, Transfers in, Other), quick "Today / Yesterday" dates, optional note.
+- **Smooth start**: a short welcome on first launch picks your currency from the phone's region and sets an optional budget. A splash screen avoids any theme flash, there are fade-through transitions and predictive back, totals glide to new values, and key actions give haptic feedback.
+- **Fast entry**: **Quick fill** chips for things you enter often (one tap fills note, category and amount), the **category is picked from your note** as you type ("Grab" → Transport), "Saved · **Undo**" after every save, edit or delete, **Duplicate** an entry, switch between Expense and Income, big amount field, color-coded categories (12 for spending, 7 for income: Salary, Business, Interest & investments, Refunds, Gifts received, Transfers in, Other), quick "Today / Yesterday" dates, optional note.
 - **Home dashboard**: this month's total vs. last month, a monthly budget progress bar, today and this week, last 7 days chart, top categories and recent transactions.
 - **Analytics** by week, month or year (step back through past periods):
   - Donut chart by category (top 5 plus the rest grouped), with a legend that shows each share and amount
@@ -37,10 +38,10 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
   - Cash in, cash out, what's left over, and how much of your income you kept compared with last period
   - **Safe to spend per day** for the rest of the month. It counts salary that hasn't arrived yet and regular bills that are still due.
   - **Month-end forecast**: expected money in and out at your current pace (monthly bills are left out of the daily pace, so rent doesn't skew it)
-  - **Regular income & bills**, found automatically: anything that comes back about once a month, in consecutive months, on a similar day and for a similar amount. Each shows its next expected date.
+  - **Regular income & bills**, found automatically: anything that comes back about once a month, in consecutive months, on a similar day and for a similar amount. Each shows its next expected date; tap one to log it.
   - How much of your income goes on regular bills, your main income sources, and how many recent months you spent more than came in
   - Charts: cash in vs cash out (bars going up and down from zero), running net through the period, and the last 6 months
-- **History**: browse by month, filter by All / Spending / Income and by category, search notes, swipe left to delete (with Undo), tap to edit.
+- **History**: browse by month, filter by All / Spending / Income and by category, search notes across **all months**, swipe left to delete (with Undo), tap to edit.
 - **Import bank statements** (CSV, Excel .xlsx or PDF) from History, Settings or the empty Home screen:
   - Columns are detected automatically (Date, Description, Amount or Money in/out, DR/CR). The date format is detected too, including telling 03/11 = 3 Nov apart from 11 Mar.
   - PDFs are read using where each word sits on the page, so Money in / Money out / Balance columns are told apart. If there's no column header, the running balance decides whether money went in or out. Password-protected PDFs are supported.
@@ -109,6 +110,7 @@ app/src/main/java/com/expensetracker/
 - `StatementAccuracyTest`: regressions for wrong imports (time after date, dot thousands, all-positive amounts with a balance column), printed totals and balances
 - `StatementStatusTest`: statement vs cash flow comparison and its explanations
 - `MoneyInFormatsTest`: 11 ways statements show money in vs money out
+- `SmoothFlowsTest`: first-run setup, existing users skipping it, quick fill, Save → Undo, category from the note, duplicate, logging a recurring item, search across months
 - `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1, v2 and v3
 - `ImportFlowTest`: picks a CSV statement, checks it adds up (and that ⇅ breaks and restores the check), imports it, confirms the cash flow matches the statement, then re-imports to check for duplicates
 - `Light/DarkScreenshotTest`: drives the real app with sample data and captures every screen (Robolectric + Roborazzi, no emulator needed)

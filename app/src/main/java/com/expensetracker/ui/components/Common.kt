@@ -170,9 +170,10 @@ fun StatTile(
     icon: ImageVector,
     tint: Color,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.then(if (onClick != null) Modifier.clip(MaterialTheme.shapes.large).clickable(onClick = onClick) else Modifier),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.card),
     ) {

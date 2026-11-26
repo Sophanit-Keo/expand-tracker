@@ -1,6 +1,7 @@
 package com.expensetracker.ui.analytics
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.EventRepeat
@@ -39,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,6 +51,7 @@ import com.expensetracker.domain.CashFlowSummary
 import com.expensetracker.domain.PeriodType
 import com.expensetracker.domain.RecurringItem
 import com.expensetracker.domain.StatementStatus
+import com.expensetracker.ui.Prefill
 import com.expensetracker.ui.charts.CashFlowChart
 import com.expensetracker.ui.charts.ChartLegend
 import com.expensetracker.ui.charts.LineChart
@@ -55,6 +59,7 @@ import com.expensetracker.ui.components.CategoryIcon
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.RoundedProgressBar
 import com.expensetracker.ui.components.SectionCard
+import com.expensetracker.ui.components.animatedAmount
 import com.expensetracker.ui.components.color
 import com.expensetracker.ui.theme.CashInDark
 import com.expensetracker.ui.theme.CashInLight
@@ -95,6 +100,7 @@ fun LazyListScope.cashFlowItems(
     onAddIncome: () -> Unit,
     onImport: () -> Unit,
     onRemoveSampleData: () -> Unit = {},
+    onLogRecurring: (Prefill) -> Unit = {},
 ) {
     val summary = state.cashFlow ?: return
     val currency = state.currency
@@ -181,7 +187,7 @@ fun LazyListScope.cashFlowItems(
     }
 
     if (summary.recurringIncome.isNotEmpty() || summary.recurringBills.isNotEmpty()) {
-        item { RecurringCard(summary, state.today, currency) }
+        item { RecurringCard(summary, state.today, currency, onLogRecurring) }
     }
 
     if (summary.incomeBySource.isNotEmpty()) {
@@ -236,8 +242,8 @@ private fun CashSummaryCard(summary: CashFlowSummary, state: AnalyticsUiState) {
     val currency = state.currency
     SectionCard {
         Row(Modifier.fillMaxWidth()) {
-            Figure("Cash in", "+" + formatMoney(summary.cashIn, currency), cashInColor, Modifier.weight(1f))
-            Figure("Cash out", "−" + formatMoney(summary.cashOut, currency), cashOutColor, Modifier.weight(1f))
+            Figure("Cash in", "+" + formatMoney(animatedAmount(summary.cashIn), currency), cashInColor, Modifier.weight(1f))
+            Figure("Cash out", "−" + formatMoney(animatedAmount(summary.cashOut), currency), cashOutColor, Modifier.weight(1f))
         }
         if (summary.cashIn == 0.0) {
             Spacer(Modifier.height(8.dp))
@@ -250,7 +256,7 @@ private fun CashSummaryCard(summary: CashFlowSummary, state: AnalyticsUiState) {
         Spacer(Modifier.height(18.dp))
         Text(if (summary.net >= 0) "Left over" else "Short by", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            formatMoney(abs(summary.net), currency),
+            formatMoney(abs(animatedAmount(summary.net)), currency),
             style = MaterialTheme.typography.displaySmall,
             color = if (summary.net >= 0) MaterialTheme.colorScheme.onSurface else Increase,
         )
@@ -357,17 +363,19 @@ private fun SmartInsightsCard(summary: CashFlowSummary, state: AnalyticsUiState)
 }
 
 @Composable
-private fun RecurringCard(summary: CashFlowSummary, today: LocalDate, currency: AppCurrency) {
+private fun RecurringCard(summary: CashFlowSummary, today: LocalDate, currency: AppCurrency, onLog: (Prefill) -> Unit) {
     val items = (summary.recurringIncome + summary.recurringBills).sortedBy { it.nextDate }
-    SectionCard(title = "Regular income & bills", subtitle = "Spotted from the last 4 months · sorted by next date") {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items.forEach { RecurringRow(it, today, currency) }
+    SectionCard(title = "Regular income & bills", subtitle = "Spotted from the last 4 months · tap one to log it") {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items.forEach { item ->
+                RecurringRow(item, today, currency) { onLog(Prefill(item.typicalAmount, item.category, item.name)) }
+            }
         }
     }
 }
 
 @Composable
-private fun RecurringRow(item: RecurringItem, today: LocalDate, currency: AppCurrency) {
+private fun RecurringRow(item: RecurringItem, today: LocalDate, currency: AppCurrency, onLog: () -> Unit) {
     val income = item.type == EntryType.INCOME
     val days = ChronoUnit.DAYS.between(today, item.nextDate)
     val whenText = when {
@@ -376,7 +384,15 @@ private fun RecurringRow(item: RecurringItem, today: LocalDate, currency: AppCur
         days < 14 -> "In $days days · ${shortDate(item.nextDate)}"
         else -> "Next on ${shortDate(item.nextDate)}"
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(onClick = onLog)
+            .padding(vertical = 6.dp)
+            .testTag("recurring_row"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         CategoryIcon(item.category, size = 40.dp, iconSize = 20.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -393,6 +409,12 @@ private fun RecurringRow(item: RecurringItem, today: LocalDate, currency: AppCur
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = if (income) CashInText else MaterialTheme.colorScheme.onSurface,
+        )
+        Icon(
+            Icons.Rounded.AddCircleOutline,
+            contentDescription = "Log ${item.name} now",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 10.dp).size(20.dp),
         )
     }
 }

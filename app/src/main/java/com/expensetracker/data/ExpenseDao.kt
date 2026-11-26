@@ -23,6 +23,9 @@ interface ExpenseDao {
     suspend fun upsert(expense: Expense)
 
     @Insert
+    suspend fun insert(expense: Expense): Long
+
+    @Insert
     suspend fun insertAll(expenses: List<Expense>)
 
     @Delete

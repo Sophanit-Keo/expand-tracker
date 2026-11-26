@@ -43,6 +43,7 @@ data class HistoryUiState(
 ) {
     val canGoNext: Boolean get() = month < YearMonth.now()
     val isFiltered: Boolean get() = query.isNotBlank() || category != null || type != null
+    val searchingAllMonths: Boolean get() = query.isNotBlank()
 }
 
 class HistoryViewModel(
@@ -56,8 +57,9 @@ class HistoryViewModel(
         combine(expenses.expenses, settings.settings, filters) { all, prefs, f ->
             val (month, query, category, type) = f
             val needle = query.trim()
+            // A search looks through every month; otherwise show the selected month.
             val filtered = all.filter { expense ->
-                YearMonth.from(expense.date) == month &&
+                (needle.isNotEmpty() || YearMonth.from(expense.date) == month) &&
                     (type == null || expense.type == type) &&
                     (category == null || expense.category == category) &&
                     (needle.isEmpty() || expense.note.contains(needle, ignoreCase = true) ||

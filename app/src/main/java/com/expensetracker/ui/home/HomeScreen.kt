@@ -59,6 +59,7 @@ import com.expensetracker.ui.components.ExpenseRow
 import com.expensetracker.ui.components.RoundedProgressBar
 import com.expensetracker.ui.components.SectionCard
 import com.expensetracker.ui.components.StatTile
+import com.expensetracker.ui.components.animatedAmount
 import com.expensetracker.ui.components.color
 import com.expensetracker.ui.theme.CashInDark
 import com.expensetracker.ui.theme.CashInLight
@@ -160,6 +161,7 @@ fun HomeContent(
                     icon = Icons.Rounded.Today,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
+                    onClick = onSeeAll,
                 )
                 StatTile(
                     label = "This week",
@@ -167,6 +169,7 @@ fun HomeContent(
                     icon = Icons.Rounded.CalendarMonth,
                     tint = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.weight(1f),
+                    onClick = onSeeAll,
                 )
             }
         }
@@ -270,7 +273,7 @@ private fun HeroCard(state: HomeUiState, onOpenSettings: () -> Unit) {
     ) {
         Text("Spent in ${state.monthName}", style = MaterialTheme.typography.titleSmall, color = onHero.copy(alpha = 0.85f))
         Spacer(Modifier.height(6.dp))
-        Text(formatMoney(state.monthTotal, state.currency), style = MaterialTheme.typography.displaySmall, color = onHero)
+        Text(formatMoney(animatedAmount(state.monthTotal), state.currency), style = MaterialTheme.typography.displaySmall, color = onHero)
         Spacer(Modifier.height(10.dp))
         ChangeChip(state.monthChangePercent, comparedTo = "last month", onDark = true)
 
@@ -339,11 +342,11 @@ private fun CashFlowCard(summary: CashFlowSummary, state: HomeUiState, onOpen: (
         },
     ) {
         Row {
-            CashFigure("In", "+" + formatMoney(summary.cashIn, state.currency), inColor, Modifier.weight(1f))
-            CashFigure("Out", "−" + formatMoney(summary.cashOut, state.currency), outColor, Modifier.weight(1f))
+            CashFigure("In", "+" + formatMoney(animatedAmount(summary.cashIn), state.currency), inColor, Modifier.weight(1f))
+            CashFigure("Out", "−" + formatMoney(animatedAmount(summary.cashOut), state.currency), outColor, Modifier.weight(1f))
             CashFigure(
                 if (summary.net >= 0) "Left" else "Short",
-                formatMoney(kotlin.math.abs(summary.net), state.currency),
+                formatMoney(kotlin.math.abs(animatedAmount(summary.net)), state.currency),
                 null,
                 Modifier.weight(1f),
             )

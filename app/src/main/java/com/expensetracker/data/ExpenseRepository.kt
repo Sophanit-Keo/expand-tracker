@@ -17,6 +17,9 @@ class ExpenseRepository(
 
     suspend fun save(expense: Expense) = dao.upsert(expense)
 
+    /** Adds a new entry and returns its id (so it can be undone). */
+    suspend fun add(expense: Expense): Long = dao.insert(expense)
+
     suspend fun delete(expense: Expense) = dao.delete(expense)
 
     suspend fun addAll(expenses: List<Expense>) = dao.insertAll(expenses)

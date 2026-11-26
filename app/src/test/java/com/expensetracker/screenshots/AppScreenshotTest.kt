@@ -39,7 +39,11 @@ abstract class AppScreenshotTest(
     /** When set, only these screens are saved (e.g. the Play Store set). */
     private val only: Set<String>? = null,
 ) {
-    @get:Rule
+    /** Runs before the activity starts, so first-run setup never covers the screen. */
+    @get:Rule(order = 0)
+    val skipSetup = SkipFirstRunSetup()
+
+    @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
 
     @Before

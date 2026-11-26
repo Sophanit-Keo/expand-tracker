@@ -3,4 +3,11 @@
     <style name="Theme.ExpenseTracker" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
     </style>
+
+    <!-- Shown while the app starts; kept until settings have loaded so the theme never flashes. -->
+    <style name="Theme.ExpenseTracker.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.ExpenseTracker</item>
+    </style>
 </resources>

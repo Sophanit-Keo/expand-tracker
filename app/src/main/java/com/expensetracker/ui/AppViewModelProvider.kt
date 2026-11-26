@@ -21,6 +21,7 @@ object AppViewModelProvider {
         initializer { EditExpenseViewModel(createSavedStateHandle(), container.expenseRepository, container.settingsRepository) }
         initializer { SettingsViewModel(container.expenseRepository, container.settingsRepository) }
         initializer { ImportViewModel(container.statementImporter, container.expenseRepository, container.settingsRepository) }
+        initializer { AppStateViewModel(container.expenseRepository, container.settingsRepository) }
     }
 }
 
