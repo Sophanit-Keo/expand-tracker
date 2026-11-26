@@ -19,6 +19,7 @@ data class SettingsUiState(
     val settings: UserSettings = UserSettings(),
     val expenseCount: Int = 0,
     val sampleCount: Int = 0,
+    val importedCount: Int = 0,
 )
 
 class SettingsViewModel(
@@ -27,7 +28,7 @@ class SettingsViewModel(
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> = combine(settings.settings, expenses.expenses) { prefs, all ->
-        SettingsUiState(prefs, all.size, all.count { it.isSample })
+        SettingsUiState(prefs, all.size, all.count { it.isSample }, all.count { it.importKey != null && !it.isSample })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     fun setCurrency(currency: AppCurrency) = viewModelScope.launch { settings.setCurrency(currency) }
@@ -45,6 +46,8 @@ class SettingsViewModel(
     fun clearAll() = viewModelScope.launch { expenses.clear() }
 
     fun removeSampleData() = viewModelScope.launch { expenses.removeSampleData() }
+
+    fun removeImported() = viewModelScope.launch { expenses.removeImported() }
 
     /** All expenses as CSV text (newest first), ready to share. */
     suspend fun exportCsv(): String = buildCsv(expenses.getAll())

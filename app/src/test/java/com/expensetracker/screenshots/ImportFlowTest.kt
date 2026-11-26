@@ -158,5 +158,11 @@ class ImportFlowTest {
         compose.waitUntilAtLeastOneExists(hasText("Statement saved"), timeoutMillis = 10_000)
         assertEquals(1, runBlocking { container.expenseRepository.statements.first() }.size)
         assertEquals(6, runBlocking { container.expenseRepository.getAll() }.count { it.importKey != null })
+
+        // "Remove imported transactions" keeps the hand-typed lunch and clears statements.
+        runBlocking { container.expenseRepository.removeImported() }
+        val left = runBlocking { container.expenseRepository.getAll() }
+        assertEquals(listOf("Lunch"), left.map { it.note })
+        assertEquals(0, runBlocking { container.expenseRepository.statements.first() }.size)
     }
 }

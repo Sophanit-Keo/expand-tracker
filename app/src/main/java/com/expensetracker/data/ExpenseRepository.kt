@@ -28,6 +28,13 @@ class ExpenseRepository(
 
     suspend fun removeSampleData(): Int = dao.deleteSamples()
 
+    /** Removes every imported transaction and statement, e.g. to re-import with a fixed importer. */
+    suspend fun removeImported(): Int {
+        val removed = dao.deleteImported()
+        statementDao.deleteAll()
+        return removed
+    }
+
     /**
      * Records an imported statement (replacing an earlier import of the same file and period) and
      * links the entries with [importKeys], whether imported now or before, to it.

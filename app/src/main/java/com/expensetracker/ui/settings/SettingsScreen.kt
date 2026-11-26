@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteForever
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Payments
@@ -77,7 +78,7 @@ import com.expensetracker.util.formatMoney
 import com.expensetracker.util.sanitizeAmountInput
 import kotlinx.coroutines.launch
 
-private enum class SettingsDialog { CURRENCY, BUDGET, THEME, CLEAR }
+private enum class SettingsDialog { CURRENCY, BUDGET, THEME, CLEAR, CLEAR_IMPORTED }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -205,6 +206,16 @@ fun SettingsScreen(
                         },
                     )
                     GroupDivider()
+                    if (state.importedCount > 0) {
+                        SettingsItem(
+                            icon = Icons.Rounded.DeleteSweep,
+                            title = "Remove imported transactions",
+                            subtitle = "${state.importedCount} from bank statements. Entries you typed in stay. Use this to re-import.",
+                            onClick = { dialog = SettingsDialog.CLEAR_IMPORTED },
+                            destructive = true,
+                        )
+                        GroupDivider()
+                    }
                     SettingsItem(
                         icon = Icons.Rounded.DeleteForever,
                         title = "Delete all expenses",
@@ -259,6 +270,25 @@ fun SettingsScreen(
                 TextButton(onClick = { viewModel.clearAll(); dialog = null }) {
                     Text("Delete all", color = MaterialTheme.colorScheme.error)
                 }
+            },
+            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+        )
+        SettingsDialog.CLEAR_IMPORTED -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            icon = { Icon(Icons.Rounded.DeleteSweep, contentDescription = null) },
+            title = { Text("Remove imported transactions?") },
+            text = {
+                Text(
+                    "All ${state.importedCount} transactions imported from bank statements, and the saved statements, will be removed. " +
+                        "Entries you typed in yourself stay. You can then import your statements again.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeImported()
+                    dialog = null
+                    scope.launch { snackbar.showSnackbar("Imported transactions removed") }
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )

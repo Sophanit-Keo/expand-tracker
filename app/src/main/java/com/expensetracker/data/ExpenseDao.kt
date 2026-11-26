@@ -39,6 +39,10 @@ interface ExpenseDao {
 
     @Query("DELETE FROM expenses WHERE importKey LIKE 'sample|%'")
     suspend fun deleteSamples(): Int
+
+    /** Everything that came from bank statements; entries typed in by hand stay. */
+    @Query("DELETE FROM expenses WHERE importKey IS NOT NULL AND importKey NOT LIKE 'sample|%'")
+    suspend fun deleteImported(): Int
 }
 
 @Dao

@@ -50,7 +50,7 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
   - The statement is saved. The Cash flow tab shows your **bank balance** and checks that your cash flow for the statement's dates still matches it. If it doesn't, it says why: other entries in those dates (sample data or typed in by hand), or statement rows that weren't imported.
   - Change a category once and it's remembered for that merchant in future imports. Re-importing the same file won't create duplicates.
   - The file is read on the phone; nothing is uploaded.
-- **Settings**: 12 currencies (USD, EUR, KHR, THB, VND, …), monthly budget, light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet, add or remove sample data, delete all.
+- **Settings**: 12 currencies (USD, EUR, KHR, THB, VND, …), monthly budget, light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet, add or remove sample data, remove imported transactions (to re-import), delete all.
 
 ## Install on your phone
 
