@@ -45,6 +45,7 @@ import com.expensetracker.ui.analytics.AnalyticsScreen
 import com.expensetracker.ui.edit.EditExpenseScreen
 import com.expensetracker.ui.history.HistoryScreen
 import com.expensetracker.ui.home.HomeScreen
+import com.expensetracker.ui.importer.ImportScreen
 import com.expensetracker.ui.settings.SettingsScreen
 
 object Routes {
@@ -53,6 +54,7 @@ object Routes {
     const val ANALYTICS = "analytics"
     const val SETTINGS = "settings"
     const val EDIT = "edit?id={id}"
+    const val IMPORT = "import"
     fun edit(id: Long? = null) = if (id == null) "edit" else "edit?id=$id"
 }
 
@@ -122,16 +124,20 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                     onSeeAll = { navController.navigateTopLevel(Routes.HISTORY) },
                     onOpenAnalytics = { navController.navigateTopLevel(Routes.ANALYTICS) },
                     onOpenSettings = { navController.navigateTopLevel(Routes.SETTINGS) },
+                    onImport = { navController.navigate(Routes.IMPORT) },
                 )
             }
             composable(Routes.HISTORY) {
-                HistoryScreen(onOpenExpense = { navController.navigate(Routes.edit(it)) })
+                HistoryScreen(
+                    onOpenExpense = { navController.navigate(Routes.edit(it)) },
+                    onImport = { navController.navigate(Routes.IMPORT) },
+                )
             }
             composable(Routes.ANALYTICS) {
                 AnalyticsScreen()
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen()
+                SettingsScreen(onImport = { navController.navigate(Routes.IMPORT) })
             }
             composable(
                 route = Routes.EDIT,
@@ -141,6 +147,20 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                 popExitTransition = { slideOutVertically { it / 3 } + fadeOut() },
             ) {
                 EditExpenseScreen(onDone = { navController.popBackStack() })
+            }
+            composable(
+                route = Routes.IMPORT,
+                enterTransition = { slideInVertically { it / 3 } + fadeIn() },
+                exitTransition = { fadeOut() },
+                popExitTransition = { slideOutVertically { it / 3 } + fadeOut() },
+            ) {
+                ImportScreen(
+                    onClose = { navController.popBackStack() },
+                    onViewHistory = {
+                        navController.popBackStack()
+                        navController.navigateTopLevel(Routes.HISTORY)
+                    },
+                )
             }
         }
     }

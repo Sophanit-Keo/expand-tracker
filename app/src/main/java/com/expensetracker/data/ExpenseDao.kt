@@ -29,4 +29,16 @@ interface ExpenseDao {
 
     @Query("DELETE FROM expenses")
     suspend fun deleteAll()
+
+    @Query("SELECT importKey FROM expenses WHERE importKey IS NOT NULL")
+    suspend fun importKeys(): List<String>
+}
+
+@Dao
+interface CategoryRuleDao {
+    @Query("SELECT * FROM category_rules")
+    suspend fun getAll(): List<CategoryRule>
+
+    @Upsert
+    suspend fun upsert(rules: List<CategoryRule>)
 }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Savings
+import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -80,7 +81,10 @@ private enum class SettingsDialog { CURRENCY, BUDGET, THEME, CLEAR }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = AppViewModelProvider.Factory)) {
+fun SettingsScreen(
+    onImport: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = AppViewModelProvider.Factory),
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings = state.settings
     var dialog by rememberSaveable { mutableStateOf<SettingsDialog?>(null) }
@@ -151,6 +155,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = AppViewMod
             }
             item {
                 SettingsGroup("Data") {
+                    SettingsItem(
+                        icon = Icons.Rounded.UploadFile,
+                        title = "Import bank statement",
+                        subtitle = "Add expenses from a CSV, Excel or PDF statement",
+                        onClick = onImport,
+                    )
+                    GroupDivider()
                     SettingsItem(
                         icon = Icons.Rounded.FileDownload,
                         title = "Export as CSV",

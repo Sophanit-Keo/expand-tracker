@@ -10,6 +10,7 @@ import com.expensetracker.ui.analytics.AnalyticsViewModel
 import com.expensetracker.ui.edit.EditExpenseViewModel
 import com.expensetracker.ui.history.HistoryViewModel
 import com.expensetracker.ui.home.HomeViewModel
+import com.expensetracker.ui.importer.ImportViewModel
 import com.expensetracker.ui.settings.SettingsViewModel
 
 object AppViewModelProvider {
@@ -19,6 +20,7 @@ object AppViewModelProvider {
         initializer { AnalyticsViewModel(container.expenseRepository, container.settingsRepository) }
         initializer { EditExpenseViewModel(createSavedStateHandle(), container.expenseRepository, container.settingsRepository) }
         initializer { SettingsViewModel(container.expenseRepository, container.settingsRepository) }
+        initializer { ImportViewModel(container.statementImporter, container.expenseRepository, container.settingsRepository) }
     }
 }
 

@@ -1,0 +1,168 @@
+package com.expensetracker.importer
+
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.expensetracker.data.AppDatabase
+import com.expensetracker.data.Category
+import com.expensetracker.data.CategoryRule
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
+import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission
+import com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy
+import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import java.io.ByteArrayOutputStream
+import java.time.LocalDate
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [35])
+class ImporterIntegrationTest {
+    private val context: Context get() = ApplicationProvider.getApplicationContext()
+    private val importer get() = StatementImporter(context)
+
+    /** A statement table drawn at fixed x positions, like a bank's PDF. */
+    private fun statementPdf(password: String? = null): ByteArray {
+        PDFBoxResourceLoader.init(context)
+        val rows = listOf(
+            listOf("Date", "Description", "Money In", "Money Out", "Balance"),
+            listOf("01/11/2026", "Opening balance", "", "", "500.00"),
+            listOf("03/11/2026", "KFC AEON MALL", "", "12.50", "487.50"),
+            listOf("05/11/2026", "SALARY NOVEMBER", "1,000.00", "", "1,487.50"),
+            listOf("09/11/2026", "LUCKY SUPERMARKET", "", "64.20", "1,423.30"),
+        )
+        val columnsX = listOf(40f, 120f, 300f, 380f, 470f)
+        PDDocument().use { doc ->
+            val page = PDPage()
+            doc.addPage(page)
+            PDPageContentStream(doc, page).use { cs ->
+                cs.setFont(PDType1Font.HELVETICA, 10f)
+                rows.forEachIndexed { r, cells ->
+                    cells.forEachIndexed { c, text ->
+                        if (text.isEmpty()) return@forEachIndexed
+                        cs.beginText()
+                        cs.newLineAtOffset(columnsX[c], 700f - r * 18f)
+                        cs.showText(text)
+                        cs.endText()
+                    }
+                }
+            }
+            if (password != null) {
+                val policy = StandardProtectionPolicy("owner-$password", password, AccessPermission())
+                policy.encryptionKeyLength = 128
+                doc.protect(policy)
+            }
+            return ByteArrayOutputStream().also { doc.save(it) }.toByteArray()
+        }
+    }
+
+    @Test
+    fun readsTransactionsFromARealPdf() = runBlocking {
+        val content = importer.load(StatementImporter.PickedFile("statement.pdf", statementPdf()))
+        val result = (content as StatementContent.Pdf).result
+        assertTrue(result.usedColumnHeader)
+        assertEquals(
+            listOf(
+                ParsedTransaction(LocalDate.of(2026, 11, 3), "KFC AEON MALL", 12.5, Direction.OUT),
+                ParsedTransaction(LocalDate.of(2026, 11, 5), "SALARY NOVEMBER", 1000.0, Direction.IN),
+                ParsedTransaction(LocalDate.of(2026, 11, 9), "LUCKY SUPERMARKET", 64.2, Direction.OUT),
+            ),
+            result.transactions,
+        )
+    }
+
+    @Test
+    fun passwordProtectedPdfAsksForPassword() = runBlocking {
+        val file = StatementImporter.PickedFile("statement.pdf", statementPdf(password = "0101"))
+        assertEquals(StatementContent.PasswordRequired, importer.load(file))
+        assertEquals(StatementContent.PasswordRequired, importer.load(file, "wrong"))
+        val unlocked = importer.load(file, "0101") as StatementContent.Pdf
+        assertEquals(3, unlocked.result.transactions.size)
+    }
+
+    private fun xlsx(): ByteArray {
+        fun ZipOutputStream.put(name: String, xml: String) {
+            putNextEntry(ZipEntry(name)); write(xml.toByteArray()); closeEntry()
+        }
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zip ->
+            zip.put("xl/workbook.xml", """<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Statement" sheetId="1" r:id="rId1"/></sheets></workbook>""")
+            zip.put("xl/_rels/workbook.xml.rels", """<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>""")
+            zip.put("xl/sharedStrings.xml", """<sst><si><t>Transaction Date</t></si><si><t>Description</t></si><si><t>Debit</t></si><si><t>Credit</t></si><si><r><t>Grab </t></r><r><t>ride</t></r></si><si><t>Cash deposit</t></si></sst>""")
+            zip.put("xl/styles.xml", """<styleSheet><numFmts><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><cellXfs><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>""")
+            zip.put(
+                "xl/worksheets/sheet1.xml",
+                """<worksheet><sheetData>
+                    <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c></row>
+                    <row r="2"><c r="A2" s="1"><v>46352</v></c><c r="B2" t="s"><v>4</v></c><c r="C2"><v>3.2</v></c></row>
+                    <row r="3"><c r="A3" s="1"><v>46353</v></c><c r="B3" t="s"><v>5</v></c><c r="D3"><v>50</v></c></row>
+                    <row r="4"><c r="A4" s="1"><v>46354</v></c><c r="B4" t="inlineStr"><is><t>Netflix</t></is></c><c r="C4"><v>15.99</v></c></row>
+                </sheetData></worksheet>""",
+            )
+        }
+        return out.toByteArray()
+    }
+
+    @Test
+    fun readsAnExcelFile() = runBlocking {
+        val content = importer.load(StatementImporter.PickedFile("statement.xlsx", xlsx())) as StatementContent.Table
+        assertEquals(StatementKind.EXCEL, content.kind)
+        val mapping = TableMapper.detect(content.rows)!!
+        val tx = TableMapper.apply(content.rows, mapping)
+        assertEquals(
+            listOf(
+                ParsedTransaction(LocalDate.of(2026, 11, 26), "Grab ride", 3.2, Direction.OUT),
+                ParsedTransaction(LocalDate.of(2026, 11, 27), "Cash deposit", 50.0, Direction.IN),
+                ParsedTransaction(LocalDate.of(2026, 11, 28), "Netflix", 15.99, Direction.OUT),
+            ),
+            tx,
+        )
+    }
+
+    @Test
+    fun oldXlsFilesGetAHelpfulMessage() = runBlocking {
+        val bytes = byteArrayOf(0xD0.toByte(), 0xCF.toByte(), 0x11, 0xE0.toByte(), 0, 0, 0, 0)
+        val content = importer.load(StatementImporter.PickedFile("statement.xls", bytes))
+        assertTrue((content as StatementContent.Unsupported).message.contains(".xlsx"))
+    }
+
+    /** Recreates the exact version-1 database the first release shipped, then upgrades it. */
+    @Test
+    fun upgradeFromVersion1KeepsExpenses() = runBlocking {
+        val name = "upgrade-test.db"
+        context.deleteDatabase(name)
+        SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(name).apply { parentFile?.mkdirs() }, null).use { db ->
+            db.execSQL("CREATE TABLE IF NOT EXISTS `expenses` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `amount` REAL NOT NULL, `category` TEXT NOT NULL, `note` TEXT NOT NULL, `date` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_expenses_date` ON `expenses` (`date`)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)")
+            db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '61b3b8007d470f516510c00ba44c4641')")
+            db.execSQL("INSERT INTO expenses (amount, category, note, date, createdAt) VALUES (12.5, 'FOOD', 'Lunch', ${LocalDate.of(2026, 11, 20).toEpochDay()}, 1)")
+            db.version = 1
+        }
+
+        val database = AppDatabase.build(context, name)
+        try {
+            val all = database.expenseDao().getAll()
+            assertEquals(1, all.size)
+            assertEquals("Lunch", all.single().note)
+            assertEquals(Category.FOOD, all.single().category)
+            assertNull(all.single().importKey)
+            database.categoryRuleDao().upsert(listOf(CategoryRule("starbucks", Category.FOOD)))
+            assertEquals(Category.FOOD, database.categoryRuleDao().getAll().single().category)
+        } finally {
+            database.close()
+            context.deleteDatabase(name)
+        }
+    }
+}

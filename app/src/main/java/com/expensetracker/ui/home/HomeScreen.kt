@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.Wallet
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -71,10 +72,11 @@ fun HomeScreen(
     onSeeAll: () -> Unit,
     onOpenAnalytics: () -> Unit,
     onOpenSettings: () -> Unit,
+    onImport: () -> Unit,
     viewModel: HomeViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    HomeContent(state, onAddExpense, onOpenExpense, onSeeAll, onOpenAnalytics, onOpenSettings, viewModel::loadSampleData)
+    HomeContent(state, onAddExpense, onOpenExpense, onSeeAll, onOpenAnalytics, onOpenSettings, onImport, viewModel::loadSampleData)
 }
 
 @Composable
@@ -85,6 +87,7 @@ fun HomeContent(
     onSeeAll: () -> Unit,
     onOpenAnalytics: () -> Unit,
     onOpenSettings: () -> Unit,
+    onImport: () -> Unit,
     onLoadSample: () -> Unit,
 ) {
     val statusBar = WindowInsets.statusBars.asPaddingValues()
@@ -114,6 +117,12 @@ fun HomeContent(
                                 Icon(Icons.Rounded.Add, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("Add expense")
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(onClick = onImport) {
+                                Icon(Icons.Rounded.UploadFile, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Import bank statement")
                             }
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(onClick = onLoadSample) {
