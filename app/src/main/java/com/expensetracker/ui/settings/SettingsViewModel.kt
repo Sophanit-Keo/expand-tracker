@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Expense
 import com.expensetracker.data.ExpenseRepository
-import com.expensetracker.data.SampleData
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.data.ThemeMode
 import com.expensetracker.data.UserSettings
@@ -14,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 data class SettingsUiState(
     val settings: UserSettings = UserSettings(),
@@ -39,10 +40,6 @@ class SettingsViewModel(
 
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { settings.setDynamicColor(enabled) }
 
-    fun loadSampleData() = viewModelScope.launch {
-        expenses.addAll(SampleData.generate(uiState.value.settings.currency))
-    }
-
     fun clearAll() = viewModelScope.launch { expenses.clear() }
 
     fun removeSampleData() = viewModelScope.launch { expenses.removeSampleData() }
@@ -54,13 +51,16 @@ class SettingsViewModel(
 
     companion object {
         fun buildCsv(items: List<Expense>): String = buildString {
-            appendLine("date,type,category,amount,note")
+            // amount is in the main currency; the last two columns are set for entries paid in another one.
+            appendLine("date,type,category,amount,note,original_amount,original_currency")
             items.forEach { e ->
                 append(e.date).append(',')
                 append(if (e.isIncome) "income" else "expense").append(',')
                 append(csvField(e.category.label)).append(',')
-                append(e.amount).append(',')
-                appendLine(csvField(e.note))
+                append(BigDecimal.valueOf(e.amount).setScale(6, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()).append(',')
+                append(csvField(e.note)).append(',')
+                append(e.originalAmount?.let { BigDecimal.valueOf(it).stripTrailingZeros().toPlainString() }.orEmpty()).append(',')
+                appendLine(e.originalCurrency?.name.orEmpty())
             }
         }
 

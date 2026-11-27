@@ -159,7 +159,7 @@ PRIVATE BY DESIGN
 • No internet permission: your data never leaves your phone
 • Export to CSV whenever you like
 
-Also: English and Khmer, 12 currencies including USD, EUR, KHR, THB and VND, plus dark mode and Material You colours.
+Also: English and Khmer, expenses in several currencies with your own exchange rates (USD, EUR, KHR, THB, VND and more), plus dark mode and Material You colours.
 ```
 
 ### Khmer listing (ភាសាខ្មែរ)
@@ -201,7 +201,7 @@ translations → Add your own translation text → Khmer – km-KH**. Use the Kh
 • គ្មានគណនី គ្មានការផ្សាយពាណិជ្ជកម្ម គ្មានការតាមដាន
 • ទិន្នន័យរបស់អ្នកនៅតែលើទូរសព្ទរបស់អ្នក
 
-មានភាសាខ្មែរ និងអង់គ្លេស រូបិយប័ណ្ណ 12 រួមទាំងរៀល (KHR) និងដុល្លារ (USD) និងរចនាប័ទ្មងងឹត។
+មានភាសាខ្មែរ និងអង់គ្លេស កត់ត្រាចំណាយជារូបិយប័ណ្ណច្រើន (រៀល ដុល្លារ បាត…) តាមអត្រាប្ដូរប្រាក់របស់អ្នក និងរចនាប័ទ្មងងឹត។
 ```
 
 ---

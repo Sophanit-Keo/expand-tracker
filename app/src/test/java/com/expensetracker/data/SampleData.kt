@@ -76,7 +76,7 @@ object SampleData {
     }
 
     private fun scale(amountUsd: Double, currency: AppCurrency): Double {
-        val value = amountUsd * currency.sampleScale
+        val value = amountUsd * currency.perUsd
         return when {
             currency.decimals > 0 -> (value * 4).roundToLong() / 4.0 // nearest 0.25
             value >= 10_000 -> (value / 500).roundToLong() * 500.0

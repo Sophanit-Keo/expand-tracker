@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -76,6 +77,7 @@ import com.expensetracker.BuildConfig
 import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.ThemeMode
+import com.expensetracker.domain.Exchange
 import com.expensetracker.ui.AppLanguage
 import com.expensetracker.ui.AppLocale
 import com.expensetracker.ui.AppViewModelProvider
@@ -93,6 +95,7 @@ private enum class SettingsDialog { CURRENCY, BUDGET, THEME, LANGUAGE, CLEAR, CL
 @Composable
 fun SettingsScreen(
     onImport: () -> Unit,
+    onOpenRates: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -130,9 +133,20 @@ fun SettingsScreen(
                 SettingsGroup(stringResource(R.string.group_money)) {
                     SettingsItem(
                         icon = Icons.Rounded.Payments,
-                        title = stringResource(R.string.currency),
+                        title = stringResource(R.string.main_currency),
                         subtitle = "${settings.currency.title()} (${settings.currency.symbol})",
                         onClick = { dialog = SettingsDialog.CURRENCY },
+                    )
+                    GroupDivider()
+                    SettingsItem(
+                        icon = Icons.Rounded.CurrencyExchange,
+                        title = stringResource(R.string.exchange_rates),
+                        subtitle = settings.rates.entries.sortedBy { it.key.ordinal }.take(2)
+                            .joinToString(" · ") { (c, r) -> Exchange.describe(c, settings.currency, r) }
+                            .let { if (settings.rates.size > 2) "$it …" else it }
+                            .ifEmpty { stringResource(R.string.rates_none_hint) },
+                        onClick = onOpenRates,
+                        modifier = Modifier.testTag("settings_rates"),
                     )
                     GroupDivider()
                     SettingsItem(
@@ -213,16 +227,6 @@ fun SettingsScreen(
                         )
                         GroupDivider()
                     }
-                    SettingsItem(
-                        icon = Icons.Rounded.AutoAwesome,
-                        title = stringResource(R.string.add_sample),
-                        subtitle = stringResource(R.string.add_sample_hint),
-                        onClick = {
-                            viewModel.loadSampleData()
-                            scope.launch { snackbar.showSnackbar(context.getString(R.string.sample_added)) }
-                        },
-                    )
-                    GroupDivider()
                     if (state.importedCount > 0) {
                         SettingsItem(
                             icon = Icons.Rounded.DeleteSweep,
@@ -264,7 +268,7 @@ fun SettingsScreen(
 
     when (dialog) {
         SettingsDialog.CURRENCY -> ChoiceDialog(
-            title = stringResource(R.string.currency),
+            title = stringResource(R.string.main_currency),
             options = AppCurrency.entries,
             selected = settings.currency,
             label = { "${it.title()}  ${it.symbol}" },

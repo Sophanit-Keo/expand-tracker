@@ -139,6 +139,41 @@ class ImporterIntegrationTest {
         assertEquals(ImportProblem.OLD_EXCEL, (content as StatementContent.Unsupported).problem)
     }
 
+    /** v4 (1.3–1.5) upgrades to v5: entries can keep an amount in another currency; old ones have none. */
+    @Test
+    fun upgradeFromVersion4AddsOriginalCurrency() = runBlocking {
+        val name = "upgrade-v4-test.db"
+        context.deleteDatabase(name)
+        SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(name).apply { parentFile?.mkdirs() }, null).use { db ->
+            db.execSQL("CREATE TABLE IF NOT EXISTS `expenses` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `amount` REAL NOT NULL, `category` TEXT NOT NULL, `note` TEXT NOT NULL, `date` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `importKey` TEXT, `type` TEXT NOT NULL DEFAULT 'EXPENSE', `statementId` INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `category_rules` (`merchant` TEXT NOT NULL, `category` TEXT NOT NULL, PRIMARY KEY(`merchant`))")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `statements` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `fileName` TEXT NOT NULL, `importedAt` INTEGER NOT NULL, `periodStart` INTEGER NOT NULL, `periodEnd` INTEGER NOT NULL, `totalIn` REAL NOT NULL, `totalOut` REAL NOT NULL, `transactionCount` INTEGER NOT NULL, `openingBalance` REAL, `closingBalance` REAL)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_expenses_date` ON `expenses` (`date`)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)")
+            db.execSQL("INSERT INTO expenses (amount, category, note, date, createdAt, type) VALUES (4.5, 'FOOD', 'Coffee', ${LocalDate.of(2026, 11, 25).toEpochDay()}, 1, 'EXPENSE')")
+            db.version = 4
+        }
+        val database = AppDatabase.build(context, name)
+        try {
+            val old = database.expenseDao().getAll().single()
+            assertEquals(4.5, old.amount, 0.0)
+            assertNull(old.originalAmount)
+            assertNull(old.originalCurrency)
+            database.expenseDao().insert(
+                com.expensetracker.data.Expense(
+                    amount = 3.0, category = Category.FOOD, note = "Noodles", date = LocalDate.of(2026, 11, 26),
+                    originalAmount = 12_000.0, originalCurrency = com.expensetracker.data.AppCurrency.KHR,
+                ),
+            )
+            val riel = database.expenseDao().getAll().first { it.note == "Noodles" }
+            assertEquals(12_000.0 to com.expensetracker.data.AppCurrency.KHR, riel.foreign)
+            assertEquals(1 / 4000.0, riel.exchangeRate!!, 1e-12)
+        } finally {
+            database.close()
+            context.deleteDatabase(name)
+        }
+    }
+
     /** v3 (cash flow release) upgrades to v4: statements table, and entries keep their data. */
     @Test
     fun upgradeFromVersion3AddsStatements() = runBlocking {

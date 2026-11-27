@@ -34,6 +34,7 @@ Available in **English** and **ខ្មែរ (Khmer)**.
 
 - **English and ខ្មែរ (Khmer)**: pick the language on the welcome screen or in Settings → Language, or follow the phone's language. Every screen, message, plural, date, month and weekday name and chart label is translated, and Khmer text gets taller line spacing so its vowels and subscripts are never clipped. The choice is kept across restarts and shows in Android's per-app language settings (Android 13+).
 - **Smooth start**: a short welcome on first launch picks your currency from the phone's region and sets an optional budget. A splash screen avoids any theme flash, there are fade-through transitions and predictive back, totals glide to new values, and key actions give haptic feedback.
+- **Several currencies**: tap the currency on the amount to enter an expense or income in another currency (say riel while your main currency is dollars). Type the exchange rate the usual way round ("1 USD = 4,100 ៛"); the entry shows what it counts as in your main currency, and the rate is remembered for next time. Each entry keeps its own rate, lists show both amounts, and **Settings → Exchange rates** lets you add, change or remove rates. Changing the main currency re-expresses saved rates in it.
 - **Fast entry**: **Quick fill** chips for things you enter often (one tap fills note, category and amount), the **category is picked from your note** as you type ("Grab" → Transport), "Saved · **Undo**" after every save, edit or delete, **Duplicate** an entry, switch between Expense and Income, big amount field, color-coded categories (12 for spending, 7 for income: Salary, Business, Interest & investments, Refunds, Gifts received, Transfers in, Other), quick "Today / Yesterday" dates, optional note.
 - **Home dashboard**: this month's total vs. last month, a monthly budget progress bar, today and this week, last 7 days chart, top categories and recent transactions.
 - **Analytics** by week, month or year (step back through past periods):
@@ -58,7 +59,7 @@ Available in **English** and **ខ្មែរ (Khmer)**.
   - The statement is saved. The Cash flow tab shows your **bank balance** and checks that your cash flow for the statement's dates still matches it. If it doesn't, it says why: other entries in those dates (sample data or typed in by hand), or statement rows that weren't imported.
   - Change a category once and it's remembered for that merchant in future imports. Re-importing the same file won't create duplicates.
   - The file is read on the phone; nothing is uploaded.
-- **Settings**: 12 currencies (USD, EUR, KHR, THB, VND, …), monthly budget, language (English / ខ្មែរ / phone language), light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet, add or remove sample data, remove imported transactions (to re-import), delete all.
+- **Settings**: main currency (USD, EUR, KHR, THB, VND and 7 more), exchange rates, monthly budget, language (English / ខ្មែរ / phone language), light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet (with the original amount and currency), remove imported transactions (to re-import), delete all.
 
 ## Install on your phone
 
@@ -93,8 +94,8 @@ for the App Bundle, store graphics in [`docs/play-store/`](docs/play-store/), an
 
 ```
 app/src/main/java/com/expensetracker/
-├── data/        Room entity + DAO, repositories, settings, sample data
-├── domain/      Analytics.kt (spending) and CashFlow.kt (in/out, recurring items, forecast) — pure Kotlin, unit-tested
+├── data/        Room entity + DAO, repositories, settings (main currency, exchange rates)
+├── domain/      Analytics.kt (spending), CashFlow.kt (in/out, recurring items, forecast), Exchange.kt (rates) — pure Kotlin, unit-tested
 ├── importer/    statement import: CSV/XLSX readers, column detection, PDF parser, category guesser
 ├── ui/
 │   ├── charts/      DonutChart, BarChart, LineChart, CashFlowChart (diverging in/out)
@@ -118,8 +119,10 @@ app/src/main/java/com/expensetracker/
 - `StatementAccuracyTest`: regressions for wrong imports (time after date, dot thousands, all-positive amounts with a balance column), printed totals and balances
 - `StatementStatusTest`: statement vs cash flow comparison and its explanations
 - `MoneyInFormatsTest`: 11 ways statements show money in vs money out
+- `ExchangeTest`: rate direction, conversion, re-basing rates on a new main currency, storage
+- `MultiCurrencyFlowTest`: an expense in riel converted and its rate remembered, a missing rate, editing keeps currency and rate, adding a rate in Settings
 - `SmoothFlowsTest`: first-run setup, existing users skipping it, quick fill, Save → Undo, category from the note, duplicate, logging a recurring item, search across months
-- `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1, v2 and v3
+- `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1, v2, v3 and v4
 - `ImportFlowTest`: picks a CSV statement, checks it adds up (and that ⇅ breaks and restores the check), imports it, confirms the cash flow matches the statement, then re-imports to check for duplicates
 - `Light/Dark/KhmerScreenshotTest`: drives the real app with sample data and captures every screen, in English and in Khmer (Robolectric + Roborazzi, no emulator needed)
 - `TranslationCatalogTest`: every English string has a Khmer translation with the same placeholders, and Khmer plurals use the one form Android asks for

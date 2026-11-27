@@ -85,7 +85,6 @@
     <string name="home_empty_title">ចាប់ផ្ដើមតាមដានការចំណាយរបស់អ្នក</string>
     <string name="home_empty_message">បន្ថែមការចំណាយដំបូងរបស់អ្នក ហើយសរុបប្រចាំថ្ងៃ ថវិកា និងគំនូសតាងនឹងបង្ហាញនៅទីនេះ។</string>
     <string name="import_bank_statement">នាំចូលរបាយការណ៍ធនាគារ</string>
-    <string name="explore_sample">សាកល្បងជាមួយទិន្នន័យគំរូ</string>
     <string name="this_week">សប្ដាហ៍នេះ</string>
     <string name="this_month">ខែនេះ</string>
     <string name="last_7_days">7 ថ្ងៃចុងក្រោយ</string>
@@ -160,7 +159,6 @@
     <string name="monthly_budget_optional">ថវិកាប្រចាំខែ (មិនចាំបាច់)</string>
     <string name="budget_hint">បង្ហាញជារបារវឌ្ឍនភាពនៅទំព័រដើម។ អាចប្ដូរបានគ្រប់ពេលក្នុងការកំណត់។</string>
     <string name="get_started">ចាប់ផ្ដើម</string>
-    <string name="explore_sample_first">សាកល្បងជាមួយទិន្នន័យគំរូជាមុនសិន</string>
     <string name="language">ភាសា</string>
     <string name="history_title">ប្រវត្តិ</string>
     <string name="results_all_months">លទ្ធផលពីគ្រប់ខែ</string>
@@ -319,9 +317,6 @@
         <item quantity="other">កំណត់ត្រាគំរូ %1$d។ កំណត់ត្រារបស់អ្នក និងដែលបាននាំចូលនៅដដែល។</item>
     </plurals>
     <string name="sample_removed">បានលុបទិន្នន័យគំរូ</string>
-    <string name="add_sample">បន្ថែមទិន្នន័យគំរូ</string>
-    <string name="add_sample_hint">បំពេញកម្មវិធីដោយការចំណាយគំរូរយៈពេល 4 ខែ</string>
-    <string name="sample_added">បានបន្ថែមការចំណាយគំរូ</string>
     <string name="remove_imported">លុបប្រតិបត្តិការដែលបាននាំចូល</string>
     <string name="remove_imported_hint">%1$d ពីរបាយការណ៍ធនាគារ។ កំណត់ត្រាដែលអ្នកវាយបញ្ចូលនៅដដែល។ ប្រើវាដើម្បីនាំចូលម្ដងទៀត។</string>
     <string name="delete_all">លុបការចំណាយទាំងអស់</string>
@@ -467,4 +462,23 @@
     <string name="problem_pdf_damaged">មិនអាចបើក PDF នេះបានទេ។ វាប្រហែលជាខូច។</string>
     <string name="problem_pdf_no_text">PDF នេះគ្មានអត្ថបទដែលអាចអានបានទេ។ វាប្រហែលជារូបភាពស្កេន។ សូមទាញយករបាយការណ៍ជា CSV ឬ Excel ជំនួសវិញ ឬ PDF ដែលបង្កើតដោយកម្មវិធីធនាគាររបស់អ្នក។</string>
     <string name="problem_pdf_no_transactions">រកមិនឃើញប្រតិបត្តិការក្នុង PDF នេះទេ។ បើធនាគាររបស់អ្នកមានជម្រើសទាញយកជា CSV ឬ Excel សូមសាកល្បងវាជំនួសវិញ ព្រោះវាអាចទុកចិត្តបានជាង។</string>
+    <string name="back">ត្រឡប់ក្រោយ</string>
+    <string name="main_currency">រូបិយប័ណ្ណគោល</string>
+    <string name="change_currency">ប្ដូររូបិយប័ណ្ណ</string>
+    <string name="choose_currency">ជ្រើសរូបិយប័ណ្ណ</string>
+    <string name="exchange_rate">អត្រាប្ដូរប្រាក់</string>
+    <string name="exchange_rates">អត្រាប្ដូរប្រាក់</string>
+    <string name="counts_as">គិតជា %1$s</string>
+    <string name="rate_hint">ប្រើអត្រាដែលអ្នកទទួលបានពីធនាគារ ឬកន្លែងប្ដូរប្រាក់។ វានឹងត្រូវរក្សាទុកសម្រាប់លើកក្រោយ។</string>
+    <string name="rate_error">សូមបញ្ចូលអត្រាប្ដូរប្រាក់</string>
+    <string name="rates_none_hint">បន្ថែមអត្រា សម្រាប់ប្រាក់ជារូបិយប័ណ្ណផ្សេង</string>
+    <string name="rates_intro">ការចំណាយ និងចំណូលជារូបិយប័ណ្ណផ្សេង ត្រូវបានប្ដូរទៅជា %1$s តាមអត្រាទាំងនេះ។ អ្នកក៏អាចប្ដូរអត្រានៅលើកំណត់ត្រានីមួយៗបានដែរ។</string>
+    <string name="add_rate">បន្ថែមអត្រាប្ដូរប្រាក់</string>
+    <string name="no_rates">មិនទាន់មានអត្រាប្ដូរប្រាក់ទេ។ បន្ថែមនៅទីនេះ ឬជ្រើសរូបិយប័ណ្ណផ្សេង ពេលបន្ថែមការចំណាយ។</string>
+    <string name="remove_rate">លុបអត្រា</string>
+    <plurals name="rate_used_by">
+        <item quantity="other">ប្រើក្នុងកំណត់ត្រា %1$d</item>
+    </plurals>
+    <string name="rate_not_used">មិនទាន់ប្រើ</string>
+    <string name="rate_existing_note">ការប្ដូរអត្រា មិនប្ដូរកំណត់ត្រាដែលបានរក្សាទុករួចទេ៖ កំណត់ត្រានីមួយៗរក្សាអត្រាដែលបានប្រើពេលរក្សាទុក។</string>
 </resources>

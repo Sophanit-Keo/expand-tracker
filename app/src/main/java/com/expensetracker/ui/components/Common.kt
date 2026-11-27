@@ -121,11 +121,23 @@ fun ExpenseRow(
             )
         }
         Spacer(Modifier.width(12.dp))
-        Text(
-            (if (expense.isIncome) "+" else "-") + formatMoney(expense.amount, currency),
-            style = MaterialTheme.typography.titleSmall,
-            color = if (expense.isIncome) CashInText else MaterialTheme.colorScheme.onSurface,
-        )
+        val sign = if (expense.isIncome) "+" else "-"
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                sign + formatMoney(expense.amount, currency),
+                style = MaterialTheme.typography.titleSmall,
+                color = if (expense.isIncome) CashInText else MaterialTheme.colorScheme.onSurface,
+            )
+            // Paid in another currency: show what it was.
+            expense.foreign?.takeIf { (_, c) -> c != currency }?.let { (amount, c) ->
+                Text(
+                    sign + formatMoney(amount, c),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 

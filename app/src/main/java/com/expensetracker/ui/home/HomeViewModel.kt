@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Expense
 import com.expensetracker.data.ExpenseRepository
-import com.expensetracker.data.SampleData
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.domain.Analytics
 import com.expensetracker.domain.CashFlow
@@ -19,10 +18,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -92,11 +89,4 @@ class HomeViewModel(
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
-
-    fun loadSampleData() {
-        viewModelScope.launch {
-            val currency = settings.settings.first().currency
-            expenses.addAll(SampleData.generate(currency))
-        }
-    }
 }

@@ -33,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +58,7 @@ import com.expensetracker.util.sanitizeAmountInput
 
 /** First launch: pick a currency (pre-selected from the phone's region) and an optional budget. */
 @Composable
-fun OnboardingScreen(onFinish: (AppCurrency, Double, Boolean) -> Unit) {
+fun OnboardingScreen(onFinish: (AppCurrency, Double) -> Unit) {
     var currency by rememberSaveable { mutableStateOf(AppStateViewModel.guessCurrency()) }
     var budget by rememberSaveable { mutableStateOf("") }
     val dark = LocalDarkTheme.current
@@ -139,13 +138,9 @@ fun OnboardingScreen(onFinish: (AppCurrency, Double, Boolean) -> Unit) {
 
             Spacer(Modifier.height(20.dp))
             Button(
-                onClick = { onFinish(currency, budget.toDoubleOrNull() ?: 0.0, false) },
+                onClick = { onFinish(currency, budget.toDoubleOrNull() ?: 0.0) },
                 modifier = Modifier.fillMaxWidth().height(56.dp).testTag("onboarding_start"),
             ) { Text(stringResource(R.string.get_started), style = MaterialTheme.typography.titleMedium) }
-            TextButton(
-                onClick = { onFinish(currency, budget.toDoubleOrNull() ?: 0.0, true) },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.explore_sample_first)) }
             Spacer(Modifier.height(16.dp))
         }
     }

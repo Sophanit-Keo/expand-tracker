@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Savings
@@ -94,7 +93,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    HomeContent(state, onAddExpense, onOpenExpense, onSeeAll, onOpenAnalytics, onOpenSettings, onImport, viewModel::loadSampleData, onAddIncome, onOpenCashFlow)
+    HomeContent(state, onAddExpense, onOpenExpense, onSeeAll, onOpenAnalytics, onOpenSettings, onImport, onAddIncome, onOpenCashFlow)
 }
 
 @Composable
@@ -106,7 +105,6 @@ fun HomeContent(
     onOpenAnalytics: () -> Unit,
     onOpenSettings: () -> Unit,
     onImport: () -> Unit,
-    onLoadSample: () -> Unit,
     onAddIncome: () -> Unit = {},
     onOpenCashFlow: () -> Unit = {},
 ) {
@@ -143,12 +141,6 @@ fun HomeContent(
                                 Icon(Icons.Rounded.UploadFile, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text(stringResource(R.string.import_bank_statement))
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedButton(onClick = onLoadSample) {
-                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.explore_sample))
                             }
                         }
                     },

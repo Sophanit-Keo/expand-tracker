@@ -26,7 +26,20 @@ data class Expense(
     val type: EntryType = category.type,
     /** The bank statement this entry was imported from, if any. */
     val statementId: Long? = null,
+    /**
+     * Set when the money moved in another currency: what was paid in [originalCurrency]. [amount] is
+     * always in the main currency (converted at the rate given when the entry was saved), so totals,
+     * charts and cash flow simply add it up.
+     */
+    val originalAmount: Double? = null,
+    val originalCurrency: AppCurrency? = null,
 ) {
+    /** The entry's own currency when it isn't the main one. */
+    val foreign: Pair<Double, AppCurrency>? get() = if (originalAmount != null && originalCurrency != null) originalAmount to originalCurrency else null
+
+    /** Main-currency units per one unit of [originalCurrency], as used for this entry. */
+    val exchangeRate: Double? get() = originalAmount?.takeIf { it > 0 }?.let { amount / it }
+
     val isSample: Boolean get() = importKey?.startsWith(SAMPLE_PREFIX) == true
 
     val isIncome: Boolean get() = type == EntryType.INCOME

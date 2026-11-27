@@ -3,18 +3,23 @@ package com.expensetracker.screenshots
 import androidx.annotation.StringRes
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.expensetracker.ExpenseApp
 import com.expensetracker.MainActivity
 import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
+import com.expensetracker.data.Category
+import com.expensetracker.data.Expense
 import com.expensetracker.data.SampleData
 import com.expensetracker.ui.analytics.AnalyticsTab
 import com.expensetracker.ui.analytics.AnalyticsTabs
@@ -26,6 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.LocalDate
 
 /**
  * Drives the real app (Room + DataStore + navigation) on the JVM and saves screenshots to
@@ -57,6 +63,17 @@ abstract class AppScreenshotTest(
             container.expenseRepository.addAll(SampleData.generate(AppCurrency.USD))
             container.settingsRepository.setCurrency(AppCurrency.USD)
             container.settingsRepository.setMonthlyBudget(1_500.0)
+            // A couple of things paid in riel, converted at the saved rate.
+            AppCurrency.entries.forEach { container.settingsRepository.removeRate(it) }
+            container.settingsRepository.setRate(AppCurrency.KHR, 1 / 4100.0)
+            container.settingsRepository.setRate(AppCurrency.THB, 1 / 36.0)
+            val today = LocalDate.now()
+            container.expenseRepository.addAll(
+                listOf(
+                    Expense(amount = 12_000 / 4100.0, category = Category.FOOD, note = "Num banh chok", date = today, originalAmount = 12_000.0, originalCurrency = AppCurrency.KHR),
+                    Expense(amount = 8_000 / 4100.0, category = Category.TRANSPORT, note = "Tuk-tuk", date = today.minusDays(1), originalAmount = 8_000.0, originalCurrency = AppCurrency.KHR),
+                ),
+            )
         }
     }
 
@@ -115,8 +132,23 @@ abstract class AppScreenshotTest(
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.waitUntilAtLeastOneExists(hasTestTag("nav_settings"), timeoutMillis = 10_000)
 
+        // An expense paid in riel: pick the currency, the saved rate is filled in.
+        compose.onNode(hasTestTag("add_expense")).performClick()
+        compose.waitUntilAtLeastOneExists(hasText(t(R.string.edit_title_new_expense)), timeoutMillis = 10_000)
+        compose.onNode(hasTestTag("entry_currency")).performClick()
+        compose.onNode(hasTestTag("pick_currency_KHR")).performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("rate_input"), timeoutMillis = 10_000)
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("12000")
+        compose.onNode(hasTestTag("type_expense")).performClick() // closes the keyboard focus ring
+        shoot("4c_add_expense_currency")
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntilAtLeastOneExists(hasTestTag("nav_settings"), timeoutMillis = 10_000)
+
         open("settings", R.string.monthly_budget)
         shoot("5_settings")
+        compose.onNode(hasTestTag("settings_rates")).performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("rate_KHR"), timeoutMillis = 10_000)
+        shoot("5b_exchange_rates")
     }
 }
 
@@ -127,7 +159,7 @@ class LightScreenshotTest : AppScreenshotTest("")
 class PlayStoreScreenshotTest : AppScreenshotTest(
     suffix = "",
     directory = "../docs/play-store/phone",
-    only = setOf("1_home", "9_cash_flow", "9b_cash_flow_charts", "2_analytics", "2b_analytics_charts", "3_history", "4_add_expense", "4b_add_income"),
+    only = setOf("1_home", "9_cash_flow", "9b_cash_flow_charts", "2_analytics", "2b_analytics_charts", "3_history", "4_add_expense", "4c_add_expense_currency"),
 )
 
 @Config(qualifiers = "+night")

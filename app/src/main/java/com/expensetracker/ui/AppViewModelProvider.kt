@@ -11,6 +11,7 @@ import com.expensetracker.ui.edit.EditExpenseViewModel
 import com.expensetracker.ui.history.HistoryViewModel
 import com.expensetracker.ui.home.HomeViewModel
 import com.expensetracker.ui.importer.ImportViewModel
+import com.expensetracker.ui.settings.ExchangeRatesViewModel
 import com.expensetracker.ui.settings.SettingsViewModel
 
 object AppViewModelProvider {
@@ -22,6 +23,7 @@ object AppViewModelProvider {
         initializer { SettingsViewModel(container.expenseRepository, container.settingsRepository) }
         initializer { ImportViewModel(container.statementImporter, container.expenseRepository, container.settingsRepository) }
         initializer { AppStateViewModel(container.expenseRepository, container.settingsRepository) }
+        initializer { ExchangeRatesViewModel(container.expenseRepository, container.settingsRepository) }
     }
 }
 

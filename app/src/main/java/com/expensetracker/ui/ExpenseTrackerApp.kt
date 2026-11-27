@@ -55,6 +55,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.expensetracker.R
+import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
 import com.expensetracker.ui.analytics.AnalyticsScreen
@@ -63,6 +64,7 @@ import com.expensetracker.ui.edit.EditExpenseScreen
 import com.expensetracker.ui.history.HistoryScreen
 import com.expensetracker.ui.home.HomeScreen
 import com.expensetracker.ui.importer.ImportScreen
+import com.expensetracker.ui.settings.ExchangeRatesScreen
 import com.expensetracker.ui.settings.SettingsScreen
 import com.expensetracker.ui.theme.card
 import kotlinx.coroutines.flow.collectLatest
@@ -73,13 +75,15 @@ object Routes {
     const val HISTORY = "history"
     const val ANALYTICS = "analytics"
     const val SETTINGS = "settings"
-    const val EDIT = "edit?id={id}&type={type}&amount={amount}&category={category}&note={note}"
+    const val EDIT = "edit?id={id}&type={type}&amount={amount}&category={category}&note={note}&currency={currency}&rate={rate}"
     const val IMPORT = "import"
+    const val RATES = "rates"
     fun edit(id: Long? = null) = if (id == null) "edit" else "edit?id=$id"
     fun addIncome() = "edit?type=${EntryType.INCOME.name}"
 
     /** A new entry pre-filled with these values (duplicating an entry, logging a recurring bill). */
-    fun prefilled(p: Prefill) = "edit?type=${p.category.type.name}&amount=${p.amount}&category=${p.category.name}&note=${Uri.encode(p.note)}"
+    fun prefilled(p: Prefill) = "edit?type=${p.category.type.name}&amount=${p.amount}&category=${p.category.name}&note=${Uri.encode(p.note)}" +
+        (p.currency?.let { "&currency=${it.name}" } ?: "") + (p.rate?.let { "&rate=$it" } ?: "")
 }
 
 private enum class TopLevel(val route: String, @param:StringRes val label: Int, val selectedIcon: ImageVector, val icon: ImageVector) {
@@ -90,7 +94,14 @@ private enum class TopLevel(val route: String, @param:StringRes val label: Int, 
 }
 
 /** Values to start a new entry with. */
-data class Prefill(val amount: Double, val category: Category, val note: String)
+/** Values to start a new entry with. [amount] is in [currency] (the main currency when null), at [rate]. */
+data class Prefill(
+    val amount: Double,
+    val category: Category,
+    val note: String,
+    val currency: AppCurrency? = null,
+    val rate: Double? = null,
+)
 
 private const val FADE_IN = 220
 private const val FADE_OUT = 90
@@ -201,7 +212,10 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                 )
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onImport = { navController.navigate(Routes.IMPORT) })
+                SettingsScreen(
+                    onImport = { navController.navigate(Routes.IMPORT) },
+                    onOpenRates = { navController.navigate(Routes.RATES) },
+                )
             }
             composable(
                 route = Routes.EDIT,
@@ -211,6 +225,8 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                     navArgument("amount") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("category") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("note") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("currency") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("rate") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
                 enterTransition = { slideInVertically { it / 3 } + fadeIn() },
                 exitTransition = { fadeOut() },
@@ -224,6 +240,9 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                         }
                     },
                 )
+            }
+            composable(Routes.RATES) {
+                ExchangeRatesScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 route = Routes.IMPORT,

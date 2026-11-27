@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.ExpenseRepository
-import com.expensetracker.data.SampleData
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.data.UserSettings
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,11 +41,10 @@ class AppStateViewModel(
         }
     }
 
-    fun finishOnboarding(currency: AppCurrency, monthlyBudget: Double, withSampleData: Boolean) {
+    fun finishOnboarding(currency: AppCurrency, monthlyBudget: Double) {
         viewModelScope.launch {
             settings.setCurrency(currency)
             settings.setMonthlyBudget(monthlyBudget)
-            if (withSampleData) expenses.addAll(SampleData.generate(currency))
             settings.setOnboarded()
         }
     }

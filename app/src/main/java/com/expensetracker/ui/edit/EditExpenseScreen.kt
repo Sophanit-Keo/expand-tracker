@@ -17,15 +17,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -33,10 +36,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -48,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -78,6 +84,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -91,6 +98,7 @@ import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
+import com.expensetracker.domain.Exchange
 import com.expensetracker.ui.AppViewModelProvider
 import com.expensetracker.ui.Prefill
 import com.expensetracker.ui.components.color
@@ -98,6 +106,7 @@ import com.expensetracker.ui.components.icon
 import com.expensetracker.ui.friendlyDateText
 import com.expensetracker.ui.shortTitle
 import com.expensetracker.ui.theme.card
+import com.expensetracker.ui.title
 import com.expensetracker.util.formatMoney
 import java.time.Instant
 import java.time.LocalDate
@@ -114,9 +123,11 @@ fun EditExpenseScreen(
     val haptics = LocalHapticFeedback.current
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var pickCurrency by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val amountFocus = remember { FocusRequester() }
     val noteFocus = remember { FocusRequester() }
+    val rateFocus = remember { FocusRequester() }
 
     LaunchedEffect(state.done) { if (state.done) onDone() }
     LaunchedEffect(state.loading) {
@@ -202,14 +213,17 @@ fun EditExpenseScreen(
             }
             AmountInput(
                 text = state.amountText,
-                symbol = state.currency.symbol,
-                symbolFirst = state.currency.symbolFirst,
-                decimals = state.currency.decimals,
+                currency = state.entryCurrency,
                 isError = state.showAmountError,
                 onChange = viewModel::onAmountChange,
+                onPickCurrency = { pickCurrency = true },
                 modifier = Modifier.focusRequester(amountFocus),
-                onNext = { noteFocus.requestFocus() },
+                onNext = { if (state.isForeign && state.rateText.isEmpty()) rateFocus.requestFocus() else noteFocus.requestFocus() },
             )
+            // Paid in another currency: the rate converts it to the main currency.
+            AnimatedVisibility(visible = state.isForeign) {
+                RateCard(state, viewModel::onRateChange, Modifier.focusRequester(rateFocus), onDone = { noteFocus.requestFocus() })
+            }
 
             // Things you enter often: one tap fills everything in.
             AnimatedVisibility(visible = !state.isEditing && state.suggestions.isNotEmpty()) {
@@ -219,7 +233,7 @@ fun EditExpenseScreen(
                     Spacer(Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(state.suggestions, key = { it.note + it.category }) { fill ->
-                            QuickFillChip(fill, state.currency) {
+                            QuickFillChip(fill, fill.currency ?: state.currency) {
                                 haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                                 viewModel.applySuggestion(fill)
                             }
@@ -296,6 +310,19 @@ fun EditExpenseScreen(
         }
     }
 
+    if (pickCurrency) {
+        CurrencyPickerDialog(
+            main = state.currency,
+            selected = state.entryCurrency,
+            rates = state.rates,
+            onSelect = {
+                pickCurrency = false
+                viewModel.onCurrencyChange(it)
+            },
+            onDismiss = { pickCurrency = false },
+        )
+    }
+
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -317,14 +344,16 @@ fun EditExpenseScreen(
 @Composable
 private fun AmountInput(
     text: String,
-    symbol: String,
-    symbolFirst: Boolean,
-    decimals: Int,
+    currency: AppCurrency,
     isError: Boolean,
     onChange: (String) -> Unit,
+    onPickCurrency: () -> Unit,
     modifier: Modifier = Modifier,
     onNext: () -> Unit = {},
 ) {
+    val symbol = currency.symbol
+    val symbolFirst = currency.symbolFirst
+    val decimals = currency.decimals
     val colors = MaterialTheme.colorScheme
     val border by animateColorAsState(if (isError) colors.error else Color.Transparent, label = "amountBorder")
     Column(
@@ -337,7 +366,23 @@ private fun AmountInput(
             .padding(horizontal = 20.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(stringResource(R.string.amount), style = MaterialTheme.typography.labelLarge, color = colors.onPrimaryContainer.copy(alpha = 0.8f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.amount), style = MaterialTheme.typography.labelLarge, color = colors.onPrimaryContainer.copy(alpha = 0.8f))
+            Spacer(Modifier.width(10.dp))
+            // Tap to type the amount in another currency.
+            Row(
+                Modifier
+                    .clip(CircleShape)
+                    .background(colors.surface.copy(alpha = 0.7f))
+                    .clickable(onClickLabel = stringResource(R.string.change_currency), onClick = onPickCurrency)
+                    .padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
+                    .testTag("entry_currency"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(currency.name, style = MaterialTheme.typography.labelLarge, color = colors.primary)
+                Icon(Icons.Rounded.ArrowDropDown, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+            }
+        }
         Spacer(Modifier.height(8.dp))
         val amountStyle = MaterialTheme.typography.displayMedium.copy(color = colors.onPrimaryContainer, textAlign = TextAlign.Start)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
@@ -486,4 +531,102 @@ private fun QuickFillChip(fill: QuickFill, currency: AppCurrency, onClick: () ->
             maxLines = 1,
         )
     }
+}
+
+/** "1 USD = [4100] ៛" with what the amount counts as in the main currency. */
+@Composable
+private fun RateCard(state: EditUiState, onRateChange: (String) -> Unit, modifier: Modifier = Modifier, onDone: () -> Unit = {}) {
+    val colors = MaterialTheme.colorScheme
+    val example = Exchange.quote(state.entryCurrency, state.currency, Exchange.approximate(state.entryCurrency, state.currency)).value
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .clip(MaterialTheme.shapes.large)
+            .background(colors.card)
+            .border(BorderStroke(1.dp, if (state.showRateError) colors.error else colors.outlineVariant.copy(alpha = 0.6f)), MaterialTheme.shapes.large)
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.CurrencyExchange, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.exchange_rate), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            state.mainAmount?.let {
+                Text(
+                    stringResource(R.string.counts_as, formatMoney(it, state.currency)),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.primary,
+                    modifier = Modifier.testTag("converted_amount"),
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("1 ${state.quoteOne.name} =", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.width(10.dp))
+            OutlinedTextField(
+                value = state.rateText,
+                onValueChange = onRateChange,
+                modifier = modifier.weight(1f).testTag("rate_input"),
+                singleLine = true,
+                isError = state.showRateError,
+                placeholder = { Text(Exchange.formatRate(example)) },
+                textStyle = MaterialTheme.typography.titleMedium,
+                shape = MaterialTheme.shapes.medium,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { onDone() }),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(state.quoteOther.name, style = MaterialTheme.typography.titleMedium)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(if (state.showRateError) R.string.rate_error else R.string.rate_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state.showRateError) colors.error else colors.onSurfaceVariant,
+        )
+    }
+}
+
+/** Main currency first, then currencies with a saved rate, then the rest. */
+@Composable
+private fun CurrencyPickerDialog(
+    main: AppCurrency,
+    selected: AppCurrency,
+    rates: Map<AppCurrency, Double>,
+    onSelect: (AppCurrency) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val ordered = listOf(main) + AppCurrency.entries.filter { it != main && it in rates } + AppCurrency.entries.filter { it != main && it !in rates }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.choose_currency)) },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 440.dp)) {
+                items(ordered) { currency ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .selectable(selected = currency == selected, onClick = { onSelect(currency) }, role = Role.RadioButton)
+                            .padding(vertical = 8.dp, horizontal = 4.dp)
+                            .testTag("pick_currency_${currency.name}"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = currency == selected, onClick = null)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("${currency.title()} (${currency.symbol})", style = MaterialTheme.typography.bodyLarge)
+                            val detail = when {
+                                currency == main -> stringResource(R.string.main_currency)
+                                else -> rates[currency]?.let { Exchange.describe(currency, main, it) }
+                            }
+                            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    )
 }

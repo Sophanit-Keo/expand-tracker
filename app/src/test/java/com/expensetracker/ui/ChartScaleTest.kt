@@ -31,6 +31,6 @@ class ChartScaleTest {
         val csv = SettingsViewModel.buildCsv(
             listOf(Expense(amount = 4.5, category = Category.FOOD, note = "Coffee, \"large\"", date = LocalDate.of(2026, 11, 26))),
         )
-        assertEquals("date,type,category,amount,note\n2026-11-26,expense,Food & Dining,4.5,\"Coffee, \"\"large\"\"\"\n", csv)
+        assertEquals("date,type,category,amount,note,original_amount,original_currency\n2026-11-26,expense,Food & Dining,4.5,\"Coffee, \"\"large\"\"\",,\n", csv)
     }
 }
