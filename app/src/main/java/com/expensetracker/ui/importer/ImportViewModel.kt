@@ -1,8 +1,10 @@
 package com.expensetracker.ui.importer
 
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.BankStatement
 import com.expensetracker.data.Category
@@ -17,6 +19,8 @@ import com.expensetracker.importer.CategoryGuesser
 import com.expensetracker.importer.ColumnMapping
 import com.expensetracker.importer.DateParser
 import com.expensetracker.importer.Direction
+import com.expensetracker.importer.ImportException
+import com.expensetracker.importer.ImportProblem
 import com.expensetracker.importer.ParsedTransaction
 import com.expensetracker.importer.StatementContent
 import com.expensetracker.importer.StatementImporter
@@ -24,6 +28,7 @@ import com.expensetracker.importer.StatementKind
 import com.expensetracker.importer.StatementRead
 import com.expensetracker.importer.StatementSummary
 import com.expensetracker.importer.TableMapper
+import com.expensetracker.ui.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,12 +43,29 @@ import kotlin.math.roundToLong
 
 enum class ImportStep { PICK, READING, PASSWORD, MAP, REVIEW, IMPORTING, DONE, ERROR }
 
-enum class RowFlag(val label: String) {
-    ALREADY_IMPORTED("Already imported"),
-    POSSIBLE_DUPLICATE("Possible duplicate of an expense you added"),
-    MONEY_IN("Money in · added as income"),
-    CHECK_DIRECTION("Money in or out? Tap ⇅ to switch"),
+enum class RowFlag(@param:StringRes val label: Int) {
+    ALREADY_IMPORTED(R.string.flag_already_imported),
+    POSSIBLE_DUPLICATE(R.string.flag_possible_duplicate),
+    MONEY_IN(R.string.flag_money_in),
+    CHECK_DIRECTION(R.string.flag_check_direction),
 }
+
+/** The message shown for each reason a file can't be imported. */
+fun ImportProblem.message(): UiText = UiText.Res(
+    when (this) {
+        ImportProblem.TOO_LARGE -> R.string.problem_too_large
+        ImportProblem.CANT_OPEN -> R.string.problem_cant_open
+        ImportProblem.EXCEL_UNREADABLE -> R.string.problem_excel_unreadable
+        ImportProblem.EXCEL_NO_SHEETS -> R.string.problem_excel_no_sheets
+        ImportProblem.EXCEL_EMPTY -> R.string.problem_excel_empty
+        ImportProblem.EXCEL_TOO_LARGE -> R.string.problem_excel_too_large
+        ImportProblem.NOT_XLSX -> R.string.problem_not_xlsx
+        ImportProblem.OLD_EXCEL -> R.string.problem_old_excel
+        ImportProblem.NO_ROWS -> R.string.problem_no_rows
+        ImportProblem.PDF_DAMAGED -> R.string.problem_pdf_damaged
+        ImportProblem.PDF_NO_TEXT -> R.string.problem_pdf_no_text
+    },
+)
 
 data class ImportCheck(
     val periodStart: LocalDate,
@@ -93,7 +115,7 @@ data class ImportUiState(
     val step: ImportStep = ImportStep.PICK,
     val fileName: String? = null,
     val kind: StatementKind? = null,
-    val errorMessage: String? = null,
+    val errorMessage: UiText? = null,
     val wrongPassword: Boolean = false,
     val currency: AppCurrency = AppCurrency.USD,
     // Spreadsheet column mapping.
@@ -164,7 +186,7 @@ class ImportViewModel(
         learned.clear()
         viewModelScope.launch {
             val picked = runCatching { importer.read(uri) }.getOrElse { e ->
-                fail(e.message ?: "The file couldn't be opened.")
+                fail(((e as? ImportException)?.problem ?: ImportProblem.CANT_OPEN).message())
                 return@launch
             }
             file = picked
@@ -181,17 +203,15 @@ class ImportViewModel(
     private suspend fun load(password: String?) {
         val picked = file ?: return
         val content = runCatching { importer.load(picked, password) }.getOrElse { e ->
-            fail("This file couldn't be read (${e.javaClass.simpleName}).")
+            fail(UiText.Res(R.string.problem_cant_read, e.javaClass.simpleName))
             return
         }
         when (content) {
             is StatementContent.PasswordRequired -> _state.update { it.copy(step = ImportStep.PASSWORD, wrongPassword = password != null) }
-            is StatementContent.Unsupported -> fail(content.message)
+            is StatementContent.Unsupported -> fail(content.problem.message())
             is StatementContent.Pdf -> {
                 if (content.result.transactions.isEmpty()) {
-                    fail(
-                        "No transactions were found in this PDF. If your bank offers a CSV or Excel download, try that instead; it's more reliable.",
-                    )
+                    fail(UiText.Res(R.string.problem_pdf_no_transactions))
                 } else {
                     _state.update { it.copy(kind = StatementKind.PDF, pdfUsedColumns = content.result.usedColumnHeader) }
                     showReview(content.result.read)
@@ -228,7 +248,7 @@ class ImportViewModel(
         )
     }
 
-    private fun fail(message: String) = _state.update { it.copy(step = ImportStep.ERROR, errorMessage = message) }
+    private fun fail(message: UiText) = _state.update { it.copy(step = ImportStep.ERROR, errorMessage = message) }
 
     // --- Column mapping -------------------------------------------------------------------------
 

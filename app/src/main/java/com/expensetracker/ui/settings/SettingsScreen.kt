@@ -1,6 +1,5 @@
 package com.expensetracker.ui.settings
 
-import com.expensetracker.ui.theme.card
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,6 +31,7 @@ import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Savings
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -64,22 +64,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.expensetracker.BuildConfig
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.ThemeMode
+import com.expensetracker.ui.AppLanguage
+import com.expensetracker.ui.AppLocale
 import com.expensetracker.ui.AppViewModelProvider
+import com.expensetracker.ui.theme.card
 import com.expensetracker.ui.theme.supportsDynamicColor
+import com.expensetracker.ui.title
 import com.expensetracker.util.amountToInput
 import com.expensetracker.util.formatMoney
 import com.expensetracker.util.sanitizeAmountInput
 import kotlinx.coroutines.launch
 
-private enum class SettingsDialog { CURRENCY, BUDGET, THEME, CLEAR, CLEAR_IMPORTED, LICENSES }
+private enum class SettingsDialog { CURRENCY, BUDGET, THEME, LANGUAGE, CLEAR, CLEAR_IMPORTED, LICENSES }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,7 +107,7 @@ fun SettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -119,36 +127,44 @@ fun SettingsScreen(
             ),
         ) {
             item {
-                SettingsGroup("Money") {
+                SettingsGroup(stringResource(R.string.group_money)) {
                     SettingsItem(
                         icon = Icons.Rounded.Payments,
-                        title = "Currency",
-                        subtitle = "${settings.currency.displayName} (${settings.currency.symbol})",
+                        title = stringResource(R.string.currency),
+                        subtitle = "${settings.currency.title()} (${settings.currency.symbol})",
                         onClick = { dialog = SettingsDialog.CURRENCY },
                     )
                     GroupDivider()
                     SettingsItem(
                         icon = Icons.Rounded.Savings,
-                        title = "Monthly budget",
-                        subtitle = if (settings.monthlyBudget > 0) formatMoney(settings.monthlyBudget, settings.currency) else "Not set",
+                        title = stringResource(R.string.monthly_budget),
+                        subtitle = if (settings.monthlyBudget > 0) formatMoney(settings.monthlyBudget, settings.currency) else stringResource(R.string.not_set),
                         onClick = { dialog = SettingsDialog.BUDGET },
                     )
                 }
             }
             item {
-                SettingsGroup("Appearance") {
+                SettingsGroup(stringResource(R.string.group_appearance)) {
+                    SettingsItem(
+                        icon = Icons.Rounded.Translate,
+                        title = stringResource(R.string.language),
+                        subtitle = AppLocale.selected().title(),
+                        onClick = { dialog = SettingsDialog.LANGUAGE },
+                        modifier = Modifier.testTag("settings_language"),
+                    )
+                    GroupDivider()
                     SettingsItem(
                         icon = Icons.Rounded.DarkMode,
-                        title = "Theme",
-                        subtitle = settings.themeMode.label,
+                        title = stringResource(R.string.theme),
+                        subtitle = settings.themeMode.title(),
                         onClick = { dialog = SettingsDialog.THEME },
                     )
                     if (supportsDynamicColor) {
                         GroupDivider()
                         SettingsItem(
                             icon = Icons.Rounded.ColorLens,
-                            title = "Dynamic color",
-                            subtitle = "Match your wallpaper colors",
+                            title = stringResource(R.string.dynamic_color),
+                            subtitle = stringResource(R.string.dynamic_color_hint),
                             onClick = { viewModel.setDynamicColor(!settings.dynamicColor) },
                             trailing = { Switch(checked = settings.dynamicColor, onCheckedChange = viewModel::setDynamicColor) },
                         )
@@ -156,31 +172,31 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsGroup("Data") {
+                SettingsGroup(stringResource(R.string.group_data)) {
                     SettingsItem(
                         icon = Icons.Rounded.UploadFile,
-                        title = "Import bank statement",
-                        subtitle = "Add expenses from a CSV, Excel or PDF statement",
+                        title = stringResource(R.string.import_bank_statement),
+                        subtitle = stringResource(R.string.import_hint),
                         onClick = onImport,
                     )
                     GroupDivider()
                     SettingsItem(
                         icon = Icons.Rounded.FileDownload,
-                        title = "Export as CSV",
-                        subtitle = "${state.expenseCount} expenses · share to Drive, email or Sheets",
+                        title = stringResource(R.string.export_csv),
+                        subtitle = pluralStringResource(R.plurals.export_hint, state.expenseCount, state.expenseCount),
                         onClick = {
                             scope.launch {
                                 if (state.expenseCount == 0) {
-                                    snackbar.showSnackbar("Nothing to export yet")
+                                    snackbar.showSnackbar(context.getString(R.string.nothing_to_export))
                                     return@launch
                                 }
                                 val csv = viewModel.exportCsv()
                                 val send = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "Expenses export")
+                                    putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.export_subject))
                                     putExtra(Intent.EXTRA_TEXT, csv)
                                 }
-                                context.startActivity(Intent.createChooser(send, "Export expenses"))
+                                context.startActivity(Intent.createChooser(send, context.getString(R.string.export_chooser)))
                             }
                         },
                     )
@@ -188,30 +204,30 @@ fun SettingsScreen(
                     if (state.sampleCount > 0) {
                         SettingsItem(
                             icon = Icons.Rounded.AutoAwesome,
-                            title = "Remove sample data",
-                            subtitle = "${state.sampleCount} example entries. Your own and imported entries stay.",
+                            title = stringResource(R.string.remove_sample),
+                            subtitle = pluralStringResource(R.plurals.remove_sample_hint, state.sampleCount, state.sampleCount),
                             onClick = {
                                 viewModel.removeSampleData()
-                                scope.launch { snackbar.showSnackbar("Sample data removed") }
+                                scope.launch { snackbar.showSnackbar(context.getString(R.string.sample_removed)) }
                             },
                         )
                         GroupDivider()
                     }
                     SettingsItem(
                         icon = Icons.Rounded.AutoAwesome,
-                        title = "Add sample data",
-                        subtitle = "Fill the app with 4 months of example expenses",
+                        title = stringResource(R.string.add_sample),
+                        subtitle = stringResource(R.string.add_sample_hint),
                         onClick = {
                             viewModel.loadSampleData()
-                            scope.launch { snackbar.showSnackbar("Sample expenses added") }
+                            scope.launch { snackbar.showSnackbar(context.getString(R.string.sample_added)) }
                         },
                     )
                     GroupDivider()
                     if (state.importedCount > 0) {
                         SettingsItem(
                             icon = Icons.Rounded.DeleteSweep,
-                            title = "Remove imported transactions",
-                            subtitle = "${state.importedCount} from bank statements. Entries you typed in stay. Use this to re-import.",
+                            title = stringResource(R.string.remove_imported),
+                            subtitle = stringResource(R.string.remove_imported_hint, state.importedCount),
                             onClick = { dialog = SettingsDialog.CLEAR_IMPORTED },
                             destructive = true,
                         )
@@ -219,26 +235,26 @@ fun SettingsScreen(
                     }
                     SettingsItem(
                         icon = Icons.Rounded.DeleteForever,
-                        title = "Delete all expenses",
-                        subtitle = "Permanently remove every expense",
+                        title = stringResource(R.string.delete_all),
+                        subtitle = stringResource(R.string.delete_all_hint),
                         onClick = { dialog = SettingsDialog.CLEAR },
                         destructive = true,
                     )
                 }
             }
             item {
-                SettingsGroup("About") {
+                SettingsGroup(stringResource(R.string.group_about)) {
                     SettingsItem(
                         icon = Icons.Rounded.Info,
-                        title = "Expense Tracker",
-                        subtitle = "Version ${BuildConfig.VERSION_NAME} · your data stays on this device",
+                        title = stringResource(R.string.app_name),
+                        subtitle = stringResource(R.string.version_hint, BuildConfig.VERSION_NAME),
                         onClick = null,
                     )
                     GroupDivider()
                     SettingsItem(
                         icon = Icons.Rounded.Code,
-                        title = "Open-source licenses",
-                        subtitle = "Libraries this app is built with",
+                        title = stringResource(R.string.licenses),
+                        subtitle = stringResource(R.string.licenses_hint),
                         onClick = { dialog = SettingsDialog.LICENSES },
                     )
                 }
@@ -248,21 +264,33 @@ fun SettingsScreen(
 
     when (dialog) {
         SettingsDialog.CURRENCY -> ChoiceDialog(
-            title = "Currency",
+            title = stringResource(R.string.currency),
             options = AppCurrency.entries,
             selected = settings.currency,
-            label = { "${it.displayName}  ${it.symbol}" },
+            label = { "${it.title()}  ${it.symbol}" },
             onSelect = { viewModel.setCurrency(it); dialog = null },
             onDismiss = { dialog = null },
         )
         SettingsDialog.THEME -> ChoiceDialog(
-            title = "Theme",
+            title = stringResource(R.string.theme),
             options = ThemeMode.entries,
             selected = settings.themeMode,
-            label = { it.label },
+            label = { it.title() },
             onSelect = { viewModel.setTheme(it); dialog = null },
             onDismiss = { dialog = null },
-        )
+            )
+            SettingsDialog.LANGUAGE -> ChoiceDialog(
+                title = stringResource(R.string.language),
+                options = AppLanguage.entries,
+                selected = AppLocale.selected(),
+                label = { it.title() },
+                onSelect = {
+                    dialog = null
+                    // Recreates the screen in the new language; the choice is kept across restarts.
+                    AppLocale.select(it)
+                },
+                onDismiss = { dialog = null },
+            )
         SettingsDialog.BUDGET -> BudgetDialog(
             current = settings.monthlyBudget,
             currency = settings.currency,
@@ -272,37 +300,34 @@ fun SettingsScreen(
         SettingsDialog.CLEAR -> AlertDialog(
             onDismissRequest = { dialog = null },
             icon = { Icon(Icons.Rounded.DeleteForever, contentDescription = null) },
-            title = { Text("Delete all expenses?") },
-            text = { Text("All ${state.expenseCount} expenses will be removed from this device. This can't be undone.") },
+            title = { Text(stringResource(R.string.delete_all_title)) },
+            text = { Text(stringResource(R.string.delete_all_message, state.expenseCount)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearAll(); dialog = null }) {
-                    Text("Delete all", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete_all_confirm), color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.cancel)) } },
         )
         SettingsDialog.CLEAR_IMPORTED -> AlertDialog(
             onDismissRequest = { dialog = null },
             icon = { Icon(Icons.Rounded.DeleteSweep, contentDescription = null) },
-            title = { Text("Remove imported transactions?") },
+            title = { Text(stringResource(R.string.remove_imported_title)) },
             text = {
-                Text(
-                    "All ${state.importedCount} transactions imported from bank statements, and the saved statements, will be removed. " +
-                        "Entries you typed in yourself stay. You can then import your statements again.",
-                )
+                Text(stringResource(R.string.remove_imported_message, state.importedCount))
             },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.removeImported()
                     dialog = null
-                    scope.launch { snackbar.showSnackbar("Imported transactions removed") }
-                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+                    scope.launch { snackbar.showSnackbar(context.getString(R.string.imported_removed)) }
+                }) { Text(stringResource(R.string.remove), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.cancel)) } },
         )
         SettingsDialog.LICENSES -> AlertDialog(
             onDismissRequest = { dialog = null },
-            title = { Text("Open-source licenses") },
+            title = { Text(stringResource(R.string.licenses)) },
             text = {
                 LazyColumn(Modifier.heightIn(max = 460.dp)) {
                     items(openSourceLibraries) { (name, notice) ->
@@ -313,7 +338,7 @@ fun SettingsScreen(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.close)) } },
         )
         null -> Unit
     }
@@ -350,11 +375,12 @@ private fun SettingsItem(
     subtitle: String,
     onClick: (() -> Unit)?,
     destructive: Boolean = false,
+    modifier: Modifier = Modifier,
     trailing: @Composable (() -> Unit)? = null,
-) {
+    ) {
     val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
@@ -391,7 +417,7 @@ private fun <T> ChoiceDialog(
     title: String,
     options: List<T>,
     selected: T,
-    label: (T) -> String,
+    label: @Composable (T) -> String,
     onSelect: (T) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -416,7 +442,7 @@ private fun <T> ChoiceDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
 }
 
@@ -426,11 +452,11 @@ private fun BudgetDialog(current: Double, currency: AppCurrency, onSave: (Double
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.Savings, contentDescription = null) },
-        title = { Text("Monthly budget") },
+        title = { Text(stringResource(R.string.monthly_budget)) },
         text = {
             Column {
                 Text(
-                    "Set how much you plan to spend each month. Leave empty to turn the budget off.",
+                    stringResource(R.string.budget_dialog_message),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(16.dp))
@@ -438,7 +464,7 @@ private fun BudgetDialog(current: Double, currency: AppCurrency, onSave: (Double
                     value = text,
                     onValueChange = { text = sanitizeAmountInput(it, currency.decimals) },
                     singleLine = true,
-                    label = { Text("Amount") },
+                    label = { Text(stringResource(R.string.amount)) },
                     prefix = if (currency.symbolFirst) ({ Text(currency.symbol) }) else null,
                     suffix = if (!currency.symbolFirst) ({ Text(currency.symbol) }) else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -446,8 +472,8 @@ private fun BudgetDialog(current: Double, currency: AppCurrency, onSave: (Double
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(text.toDoubleOrNull() ?: 0.0) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSave(text.toDoubleOrNull() ?: 0.0) }) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

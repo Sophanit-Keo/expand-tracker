@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.expensetracker.R
 import com.expensetracker.domain.CashPoint
 
 /**
@@ -77,8 +79,13 @@ fun CashFlowChart(
 
     val axisMax = niceAxisMax(points.maxOfOrNull { maxOf(it.cashIn, it.cashOut) } ?: 0.0)
     val tickLabels = listOf("+" + axisFormatter(axisMax), "0", "−" + axisFormatter(axisMax))
-    val description = points.joinToString(prefix = "Cash in and out. ") {
-        "${it.label}: in ${valueFormatter(it.cashIn)}, out ${valueFormatter(it.cashOut)}"
+    val prefix = stringResource(R.string.chart_cash) + " "
+    val pointFormat = stringResource(R.string.chart_cash_point)
+    val tipIn = stringResource(R.string.tooltip_in)
+    val tipOut = stringResource(R.string.tooltip_out)
+    val tipNet = stringResource(R.string.tooltip_net)
+    val description = points.joinToString(prefix = prefix) {
+        pointFormat.format(it.label, valueFormatter(it.cashIn), valueFormatter(it.cashOut))
     }
 
     fun layout(width: Float, heightPx: Float, density: Density) = with(density) {
@@ -152,9 +159,9 @@ fun CashFlowChart(
                 textMeasurer,
                 listOf(
                     tooltipLabel(index) to tipMuted,
-                    "In  +${valueFormatter(p.cashIn)}" to tipText,
-                    "Out  −${valueFormatter(p.cashOut)}" to tipText,
-                    "Net  ${if (net >= 0) "+" else "−"}${valueFormatter(kotlin.math.abs(net))}" to tipStrong,
+                    tipIn.format(valueFormatter(p.cashIn)) to tipText,
+                    tipOut.format(valueFormatter(p.cashOut)) to tipText,
+                    tipNet.format((if (net >= 0) "+" else "−") + valueFormatter(kotlin.math.abs(net))) to tipStrong,
                 ),
                 anchorX = l.left + l.slot * index + l.slot / 2,
                 minX = l.left,

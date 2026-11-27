@@ -42,11 +42,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.ui.theme.LocalDarkTheme
 import com.expensetracker.ui.theme.card
@@ -73,7 +76,8 @@ fun OnboardingScreen(onFinish: (AppCurrency, Double, Boolean) -> Unit) {
                 .testTag("onboarding_scroll")
                 .padding(horizontal = 20.dp),
         ) {
-            Spacer(Modifier.height(16.dp))
+            LanguageToggle(Modifier.align(Alignment.End).padding(top = 8.dp))
+            Spacer(Modifier.height(8.dp))
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -91,22 +95,22 @@ fun OnboardingScreen(onFinish: (AppCurrency, Double, Boolean) -> Unit) {
                     Icon(Icons.Rounded.Wallet, contentDescription = null, tint = colors.onHero(dark), modifier = Modifier.size(30.dp))
                 }
                 Spacer(Modifier.height(16.dp))
-                Text("Welcome to Expense Tracker", style = MaterialTheme.typography.headlineSmall, color = colors.onHero(dark))
+                Text(stringResource(R.string.welcome_title), style = MaterialTheme.typography.headlineSmall, color = colors.onHero(dark))
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Know where your money goes and what's left. Takes 10 seconds to set up.",
+                    stringResource(R.string.welcome_message),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onHero(dark).copy(alpha = 0.9f),
                 )
             }
             Spacer(Modifier.height(16.dp))
-            Feature(Icons.Rounded.UploadFile, "Add in seconds, or import your bank statement")
-            Feature(Icons.Rounded.Insights, "See your cash flow, budget and what's safe to spend")
-            Feature(Icons.Rounded.Lock, "Private: no account, and your data stays on this phone")
+            Feature(Icons.Rounded.UploadFile, stringResource(R.string.welcome_feature_add))
+            Feature(Icons.Rounded.Insights, stringResource(R.string.welcome_feature_insights))
+            Feature(Icons.Rounded.Lock, stringResource(R.string.welcome_feature_private))
 
             Spacer(Modifier.height(20.dp))
-            Text("Your currency", style = MaterialTheme.typography.titleMedium)
-            Text("Picked from your phone's region. Tap to change.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            Text(stringResource(R.string.your_currency), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.currency_hint), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             Spacer(Modifier.height(10.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AppCurrency.entries.chunked(3).forEach { row ->
@@ -118,7 +122,7 @@ fun OnboardingScreen(onFinish: (AppCurrency, Double, Boolean) -> Unit) {
             }
 
             Spacer(Modifier.height(20.dp))
-            Text("Monthly budget (optional)", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.monthly_budget_optional), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = budget,
@@ -127,7 +131,7 @@ fun OnboardingScreen(onFinish: (AppCurrency, Double, Boolean) -> Unit) {
                 placeholder = { Text(if (currency.decimals == 0) "2000000" else "1500") },
                 prefix = if (currency.symbolFirst) ({ Text(currency.symbol) }) else null,
                 suffix = if (!currency.symbolFirst) ({ Text(currency.symbol) }) else null,
-                supportingText = { Text("Shown as a progress bar on the home screen. Change it any time in Settings.") },
+                supportingText = { Text(stringResource(R.string.budget_hint)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth().testTag("onboarding_budget"),
@@ -137,11 +141,11 @@ fun OnboardingScreen(onFinish: (AppCurrency, Double, Boolean) -> Unit) {
             Button(
                 onClick = { onFinish(currency, budget.toDoubleOrNull() ?: 0.0, false) },
                 modifier = Modifier.fillMaxWidth().height(56.dp).testTag("onboarding_start"),
-            ) { Text("Get started", style = MaterialTheme.typography.titleMedium) }
+            ) { Text(stringResource(R.string.get_started), style = MaterialTheme.typography.titleMedium) }
             TextButton(
                 onClick = { onFinish(currency, budget.toDoubleOrNull() ?: 0.0, true) },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Explore with sample data first") }
+            ) { Text(stringResource(R.string.explore_sample_first)) }
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -180,3 +184,30 @@ private fun CurrencyChip(currency: AppCurrency, selected: Boolean, onClick: () -
     }
 }
 
+
+/** English | ខ្មែរ, shown as two pills; switching recreates the screen in the new language. */
+@Composable
+private fun LanguageToggle(modifier: Modifier = Modifier) {
+    val khmer = AppLocale.isKhmer(appLocale())
+    Row(
+        modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(3.dp),
+    ) {
+        listOf(AppLanguage.ENGLISH to "English", AppLanguage.KHMER to "ខ្មែរ").forEach { (language, name) ->
+            val selected = (language == AppLanguage.KHMER) == khmer
+            Text(
+                name,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .clickable { if (!selected) AppLocale.select(language) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .testTag("language_${language.name.lowercase()}"),
+            )
+        }
+    }
+}

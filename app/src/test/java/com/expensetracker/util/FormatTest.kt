@@ -3,7 +3,6 @@ package com.expensetracker.util
 import com.expensetracker.data.AppCurrency
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.time.LocalDate
 
 class FormatTest {
     @Test
@@ -34,14 +33,5 @@ class FormatTest {
     fun amountToInputDropsTrailingZeros() {
         assertEquals("12.5", amountToInput(12.5))
         assertEquals("3000", amountToInput(3000.0))
-    }
-
-    @Test
-    fun friendlyDates() {
-        val today = LocalDate.of(2026, 11, 26)
-        assertEquals("Today", friendlyDate(today, today))
-        assertEquals("Yesterday", friendlyDate(today.minusDays(1), today))
-        assertEquals("Mon, Nov 23", friendlyDate(LocalDate.of(2026, 11, 23), today))
-        assertEquals("Fri, Dec 26, 2025", friendlyDate(LocalDate.of(2025, 12, 26), today))
     }
 }

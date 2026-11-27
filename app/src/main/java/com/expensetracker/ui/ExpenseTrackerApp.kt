@@ -1,6 +1,7 @@
 package com.expensetracker.ui
 
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -41,8 +42,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -51,6 +54,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.expensetracker.R
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
 import com.expensetracker.ui.analytics.AnalyticsScreen
@@ -78,11 +82,11 @@ object Routes {
     fun prefilled(p: Prefill) = "edit?type=${p.category.type.name}&amount=${p.amount}&category=${p.category.name}&note=${Uri.encode(p.note)}"
 }
 
-private enum class TopLevel(val route: String, val label: String, val selectedIcon: ImageVector, val icon: ImageVector) {
-    HOME(Routes.HOME, "Home", Icons.Rounded.Home, Icons.Outlined.Home),
-    HISTORY(Routes.HISTORY, "History", Icons.AutoMirrored.Rounded.ReceiptLong, Icons.AutoMirrored.Outlined.ReceiptLong),
-    ANALYTICS(Routes.ANALYTICS, "Analytics", Icons.Rounded.Insights, Icons.Outlined.Insights),
-    SETTINGS(Routes.SETTINGS, "Settings", Icons.Rounded.Settings, Icons.Outlined.Settings),
+private enum class TopLevel(val route: String, @param:StringRes val label: Int, val selectedIcon: ImageVector, val icon: ImageVector) {
+    HOME(Routes.HOME, R.string.nav_home, Icons.Rounded.Home, Icons.Outlined.Home),
+    HISTORY(Routes.HISTORY, R.string.nav_history, Icons.AutoMirrored.Rounded.ReceiptLong, Icons.AutoMirrored.Outlined.ReceiptLong),
+    ANALYTICS(Routes.ANALYTICS, R.string.nav_analytics, Icons.Rounded.Insights, Icons.Outlined.Insights),
+    SETTINGS(Routes.SETTINGS, R.string.nav_settings, Icons.Rounded.Settings, Icons.Outlined.Settings),
 }
 
 /** Values to start a new entry with. */
@@ -100,13 +104,14 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
 
     // Confirmations posted by screens that have already closed (e.g. "Saved · Undo" from the editor).
     LaunchedEffect(Unit) {
         AppMessages.events.collectLatest { message ->
             val result = snackbar.showSnackbar(
-                message = message.text,
-                actionLabel = message.actionLabel,
+                message = message.text.resolve(context),
+                actionLabel = message.actionLabel?.resolve(context),
                 withDismissAction = message.actionLabel == null,
                 duration = SnackbarDuration.Short,
             )
@@ -134,7 +139,7 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                             selected = selected,
                             onClick = { navController.navigateTopLevel(item.route) },
                             icon = { Icon(if (selected) item.selectedIcon else item.icon, contentDescription = null) },
-                            label = { Text(item.label) },
+                            label = { Text(stringResource(item.label), maxLines = 1) },
                             modifier = Modifier.testTag("nav_${item.route}"),
                         )
                     }
@@ -146,7 +151,7 @@ fun ExpenseTrackerApp(navController: NavHostController = rememberNavController()
                 ExtendedFloatingActionButton(
                     onClick = { navController.navigate(Routes.edit()) },
                     icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
-                    text = { Text("Add expense") },
+                    text = { Text(stringResource(R.string.action_add_expense)) },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.testTag("add_expense"),

@@ -48,3 +48,11 @@ internal object StatementWords {
     val totalOut = Regex("""(?i)total\s+(of\s+)?(money\s+out|debits?|withdrawals?|paid\s+out|cash\s+out|outgoing|out)\b""")
     val total = Regex("""(?i)^\s*(grand\s+)?(sub-?)?totals?\b""")
 }
+
+/** Why a file can't be imported. The import screen shows a message for each in the app's language. */
+enum class ImportProblem {
+    TOO_LARGE, CANT_OPEN, EXCEL_UNREADABLE, EXCEL_NO_SHEETS, EXCEL_EMPTY, EXCEL_TOO_LARGE, NOT_XLSX,
+    OLD_EXCEL, NO_ROWS, PDF_DAMAGED, PDF_NO_TEXT,
+}
+
+class ImportException(val problem: ImportProblem) : java.io.IOException(problem.name)

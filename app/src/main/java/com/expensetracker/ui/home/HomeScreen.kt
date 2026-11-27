@@ -43,14 +43,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expensetracker.R
 import com.expensetracker.domain.CashFlowSummary
 import com.expensetracker.domain.CategoryTotal
 import com.expensetracker.ui.AppViewModelProvider
+import com.expensetracker.ui.appLocale
 import com.expensetracker.ui.charts.BarChart
 import com.expensetracker.ui.components.CategoryIcon
 import com.expensetracker.ui.components.ChangeChip
@@ -61,6 +65,8 @@ import com.expensetracker.ui.components.SectionCard
 import com.expensetracker.ui.components.StatTile
 import com.expensetracker.ui.components.animatedAmount
 import com.expensetracker.ui.components.color
+import com.expensetracker.ui.dateFormatter
+import com.expensetracker.ui.friendlyDateText
 import com.expensetracker.ui.theme.CashInDark
 import com.expensetracker.ui.theme.CashInLight
 import com.expensetracker.ui.theme.CashOutDark
@@ -68,9 +74,9 @@ import com.expensetracker.ui.theme.CashOutLight
 import com.expensetracker.ui.theme.LocalDarkTheme
 import com.expensetracker.ui.theme.heroBrush
 import com.expensetracker.ui.theme.onHero
+import com.expensetracker.ui.title
 import com.expensetracker.util.formatCompact
 import com.expensetracker.util.formatMoney
-import com.expensetracker.util.friendlyDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -123,26 +129,26 @@ fun HomeContent(
             item {
                 EmptyState(
                     icon = Icons.Rounded.Wallet,
-                    title = "Start tracking your spending",
-                    message = "Add your first expense and your daily totals, budget and charts will appear here.",
+                    title = stringResource(R.string.home_empty_title),
+                    message = stringResource(R.string.home_empty_message),
                     action = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Button(onClick = onAddExpense) {
                                 Icon(Icons.Rounded.Add, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Add expense")
+                                Text(stringResource(R.string.action_add_expense))
                             }
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(onClick = onImport) {
                                 Icon(Icons.Rounded.UploadFile, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Import bank statement")
+                                Text(stringResource(R.string.import_bank_statement))
                             }
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(onClick = onLoadSample) {
                                 Icon(Icons.Rounded.AutoAwesome, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Explore with sample data")
+                                Text(stringResource(R.string.explore_sample))
                             }
                         }
                     },
@@ -156,7 +162,7 @@ fun HomeContent(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(
-                    label = "Today",
+                    label = stringResource(R.string.today),
                     value = formatMoney(state.todayTotal, state.currency),
                     icon = Icons.Rounded.Today,
                     tint = MaterialTheme.colorScheme.primary,
@@ -164,7 +170,7 @@ fun HomeContent(
                     onClick = onSeeAll,
                 )
                 StatTile(
-                    label = "This week",
+                    label = stringResource(R.string.this_week),
                     value = formatMoney(state.weekTotal, state.currency),
                     icon = Icons.Rounded.CalendarMonth,
                     tint = MaterialTheme.colorScheme.tertiary,
@@ -180,12 +186,13 @@ fun HomeContent(
         }
 
         item {
+            val todayLabel = stringResource(R.string.today)
             SectionCard(
-                title = "Last 7 days",
-                subtitle = "${formatMoney(state.last7Days.sumOf { it.value }, state.currency)} total · tap a day for details",
+                title = stringResource(R.string.last_7_days),
+                subtitle = stringResource(R.string.last_7_days_subtitle, formatMoney(state.last7Days.sumOf { it.value }, state.currency)),
             ) {
                 BarChart(
-                    points = state.last7Days,
+                    points = state.last7Days.mapIndexed { i, p -> if (i == state.last7Days.lastIndex) p.copy(label = todayLabel) else p },
                     valueFormatter = { formatMoney(it, state.currency) },
                     axisFormatter = { formatCompact(it, state.currency) },
                     height = 190.dp,
@@ -197,11 +204,11 @@ fun HomeContent(
         if (state.topCategories.isNotEmpty()) {
             item {
                 SectionCard(
-                    title = "Top categories",
-                    subtitle = "This month",
+                    title = stringResource(R.string.top_categories),
+                    subtitle = stringResource(R.string.this_month),
                     action = {
                         TextButton(onClick = onOpenAnalytics) {
-                            Text("Analytics")
+                            Text(stringResource(R.string.nav_analytics))
                             Spacer(Modifier.width(4.dp))
                             Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
                         }
@@ -216,15 +223,15 @@ fun HomeContent(
 
         item {
             SectionCard(
-                title = "Recent transactions",
-                action = { TextButton(onClick = onSeeAll) { Text("See all") } },
+                title = stringResource(R.string.recent_transactions),
+                action = { TextButton(onClick = onSeeAll) { Text(stringResource(R.string.see_all)) } },
                 contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
             ) {
                 state.recent.forEach { expense ->
                     ExpenseRow(
                         expense = expense,
                         currency = state.currency,
-                        supportingText = "${expense.category.label} · ${friendlyDate(expense.date, state.today)}",
+                        supportingText = expense.category.title() + " · " + friendlyDateText(expense.date, state.today),
                         onClick = { onOpenExpense(expense.id) },
                     )
                 }
@@ -236,14 +243,14 @@ fun HomeContent(
 @Composable
 private fun Header(state: HomeUiState) {
     val greeting = when (LocalTime.now().hour) {
-        in 5..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        else -> "Good evening"
+        in 5..11 -> stringResource(R.string.greeting_morning)
+        in 12..16 -> stringResource(R.string.greeting_afternoon)
+        else -> stringResource(R.string.greeting_evening)
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(greeting, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Your spending", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.your_spending), style = MaterialTheme.typography.headlineMedium)
         }
         Box(
             Modifier
@@ -252,7 +259,7 @@ private fun Header(state: HomeUiState) {
                 .padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
             Text(
-                state.today.format(DateTimeFormatter.ofPattern("EEE, MMM d")),
+                dateFormatter(R.string.pattern_day).format(state.today),
                 style = MaterialTheme.typography.labelLarge,
             )
         }
@@ -271,20 +278,20 @@ private fun HeroCard(state: HomeUiState, onOpenSettings: () -> Unit) {
             .background(colors.heroBrush(dark))
             .padding(24.dp),
     ) {
-        Text("Spent in ${state.monthName}", style = MaterialTheme.typography.titleSmall, color = onHero.copy(alpha = 0.85f))
+        Text(stringResource(R.string.spent_in, monthName(state)), style = MaterialTheme.typography.titleSmall, color = onHero.copy(alpha = 0.85f))
         Spacer(Modifier.height(6.dp))
         Text(formatMoney(animatedAmount(state.monthTotal), state.currency), style = MaterialTheme.typography.displaySmall, color = onHero)
         Spacer(Modifier.height(10.dp))
-        ChangeChip(state.monthChangePercent, comparedTo = "last month", onDark = true)
+        ChangeChip(state.monthChangePercent, comparedTo = stringResource(R.string.compared_last_month), onDark = true)
 
         Spacer(Modifier.height(20.dp))
         if (state.budget > 0) {
             val progress = (state.monthTotal / state.budget).toFloat()
             val remaining = state.budget - state.monthTotal
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Monthly budget", style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.monthly_budget), style = MaterialTheme.typography.labelLarge, color = onHero.copy(alpha = 0.85f), modifier = Modifier.weight(1f))
                 Text(
-                    "${(progress * 100).roundToInt()}% of ${formatMoney(state.budget, state.currency)}",
+                    stringResource(R.string.budget_progress, (progress * 100).roundToInt(), formatMoney(state.budget, state.currency)),
                     style = MaterialTheme.typography.labelLarge,
                     color = onHero,
                 )
@@ -297,13 +304,12 @@ private fun HeroCard(state: HomeUiState, onOpenSettings: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             val daysText = when (state.daysLeftInMonth) {
-                0 -> "last day of the month"
-                1 -> "1 day left"
-                else -> "${state.daysLeftInMonth} days left"
+                0 -> stringResource(R.string.last_day_of_month)
+                else -> pluralStringResource(R.plurals.days_left, state.daysLeftInMonth, state.daysLeftInMonth)
             }
             Text(
-                if (remaining >= 0) "${formatMoney(remaining, state.currency)} left to spend · $daysText"
-                else "Over budget by ${formatMoney(-remaining, state.currency)} · $daysText",
+                if (remaining >= 0) stringResource(R.string.left_to_spend, formatMoney(remaining, state.currency), daysText)
+                else stringResource(R.string.over_budget, formatMoney(-remaining, state.currency), daysText),
                 style = MaterialTheme.typography.bodyMedium,
                 color = onHero,
                 fontWeight = if (remaining < 0) FontWeight.SemiBold else FontWeight.Normal,
@@ -319,7 +325,7 @@ private fun HeroCard(state: HomeUiState, onOpenSettings: () -> Unit) {
             ) {
                 Icon(Icons.Rounded.Savings, contentDescription = null, tint = onHero, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Set a monthly budget", style = MaterialTheme.typography.labelLarge, color = onHero)
+                Text(stringResource(R.string.set_monthly_budget), style = MaterialTheme.typography.labelLarge, color = onHero)
             }
         }
     }
@@ -331,21 +337,21 @@ private fun CashFlowCard(summary: CashFlowSummary, state: HomeUiState, onOpen: (
     val inColor = if (dark) CashInDark else CashInLight
     val outColor = if (dark) CashOutDark else CashOutLight
     SectionCard(
-        title = "Cash flow",
-        subtitle = state.monthName,
+        title = stringResource(R.string.cash_flow),
+        subtitle = monthName(state),
         action = {
             TextButton(onClick = onOpen, modifier = Modifier.testTag("open_cash_flow")) {
-                Text("Analysis")
+                Text(stringResource(R.string.analysis))
                 Spacer(Modifier.width(4.dp))
                 Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
             }
         },
     ) {
         Row {
-            CashFigure("In", "+" + formatMoney(animatedAmount(summary.cashIn), state.currency), inColor, Modifier.weight(1f))
-            CashFigure("Out", "−" + formatMoney(animatedAmount(summary.cashOut), state.currency), outColor, Modifier.weight(1f))
+            CashFigure(stringResource(R.string.cash_in_short),  "+" + formatMoney(animatedAmount(summary.cashIn), state.currency), inColor, Modifier.weight(1f))
+            CashFigure(stringResource(R.string.cash_out_short),  "−" + formatMoney(animatedAmount(summary.cashOut), state.currency), outColor, Modifier.weight(1f))
             CashFigure(
-                if (summary.net >= 0) "Left" else "Short",
+                if (summary.net >= 0) stringResource(R.string.left_short) else stringResource(R.string.short_short),
                 formatMoney(kotlin.math.abs(animatedAmount(summary.net)), state.currency),
                 null,
                 Modifier.weight(1f),
@@ -356,8 +362,8 @@ private fun CashFlowCard(summary: CashFlowSummary, state: HomeUiState, onOpen: (
             val lastMonth = summary.monthly.getOrNull(summary.monthly.size - 2)
             Spacer(Modifier.height(10.dp))
             Text(
-                "No money in recorded yet this month." +
-                    (lastMonth?.takeIf { it.cashIn > 0 }?.let { " ${it.label}: +${formatMoney(it.cashIn, state.currency)} in. Tap Analysis to see it." } ?: ""),
+                stringResource(R.string.no_income_this_month) +
+                (lastMonth?.takeIf { it.cashIn > 0 }?.let { " " + stringResource(R.string.no_income_last_month_hint, it.label, formatMoney(it.cashIn, state.currency)) } ?: ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -368,7 +374,7 @@ private fun CashFlowCard(summary: CashFlowSummary, state: HomeUiState, onOpen: (
             RoundedProgressBar(progress = used, color = outColor, trackColor = inColor.copy(alpha = 0.25f))
             Spacer(Modifier.height(6.dp))
             Text(
-                "${(used * 100).roundToInt()}% of this month's income spent",
+                stringResource(R.string.income_spent, (used * 100).roundToInt()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -387,9 +393,9 @@ private fun CashFlowCard(summary: CashFlowSummary, state: HomeUiState, onOpen: (
                 Spacer(Modifier.width(10.dp))
                 Text(
                     if (outlook.safeToSpendPerDay >= 0) {
-                        "Safe to spend ${formatMoney(outlook.safeToSpendPerDay, state.currency)} a day for the next ${outlook.remainingDays} ${if (outlook.remainingDays == 1) "day" else "days"}"
+                        pluralStringResource(R.plurals.safe_to_spend_home, outlook.remainingDays, formatMoney(outlook.safeToSpendPerDay, state.currency), outlook.remainingDays)
                     } else {
-                        "Short by ${formatMoney(-outlook.safeToSpendPerDay * outlook.remainingDays, state.currency)} this month. Keep spending low."
+                        stringResource(R.string.short_this_month, formatMoney(-outlook.safeToSpendPerDay * outlook.remainingDays, state.currency))
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -428,14 +434,14 @@ private fun IncomePrompt(onAddIncome: () -> Unit) {
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("Track money coming in", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.track_income_title), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Add your salary or other income to see what's left and what's safe to spend.",
+                    stringResource(R.string.track_income_message),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onAddIncome) { Text("Add") }
+            TextButton(onClick = onAddIncome) { Text(stringResource(R.string.add)) }
         }
     }
 }
@@ -447,7 +453,7 @@ private fun TopCategoryRow(item: CategoryTotal, state: HomeUiState) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row {
-                Text(item.category.label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(item.category.title(), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Text(formatMoney(item.total, state.currency), style = MaterialTheme.typography.titleSmall)
             }
             Spacer(Modifier.height(6.dp))
@@ -468,3 +474,8 @@ private fun TopCategoryRow(item: CategoryTotal, state: HomeUiState) {
         }
     }
 }
+
+/** This month's name in the app language ("November" / "វិច្ឆិកា"). */
+@Composable
+private fun monthName(state: HomeUiState): String =
+    state.today.month.getDisplayName(java.time.format.TextStyle.FULL_STANDALONE, appLocale())

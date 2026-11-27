@@ -4,8 +4,6 @@ import com.expensetracker.data.AppCurrency
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 
@@ -56,16 +54,3 @@ fun sanitizeAmountInput(input: String, decimals: Int, maxLength: Int = 12): Stri
 
 /** Amount as editable text, without trailing zeros: 12.5 -> "12.5", 3000.0 -> "3000". */
 fun amountToInput(amount: Double): String = BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString()
-
-private val dayFormatter = DateTimeFormatter.ofPattern("EEE, MMM d")
-private val dayYearFormatter = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy")
-private val shortFormatter = DateTimeFormatter.ofPattern("MMM d")
-
-/** "Today", "Yesterday", "Mon, Nov 24", or with the year when it isn't the current one. */
-fun friendlyDate(date: LocalDate, today: LocalDate = LocalDate.now()): String = when (date) {
-    today -> "Today"
-    today.minusDays(1) -> "Yesterday"
-    else -> if (date.year == today.year) date.format(dayFormatter) else date.format(dayYearFormatter)
-}
-
-fun shortDate(date: LocalDate): String = date.format(shortFormatter)

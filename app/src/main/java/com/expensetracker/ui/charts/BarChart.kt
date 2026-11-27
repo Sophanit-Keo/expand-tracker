@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.expensetracker.R
 import com.expensetracker.domain.ChartPoint
 
 /**
@@ -66,7 +68,9 @@ fun BarChart(
 
     val axisMax = niceAxisMax(points.maxOfOrNull { it.value } ?: 0.0)
     val ticks = listOf(0.0, axisMax / 2, axisMax)
-    val description = points.joinToString(prefix = "Bar chart. ") { "${it.label}: ${valueFormatter(it.value)}" }
+    val prefix = stringResource(R.string.chart_bar) + " "
+    val pointFormat = stringResource(R.string.chart_point)
+    val description = points.joinToString(prefix = prefix) { pointFormat.format(it.label, valueFormatter(it.value)) }
 
     Canvas(
         modifier = modifier

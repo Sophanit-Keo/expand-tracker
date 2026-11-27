@@ -1,7 +1,9 @@
 package com.expensetracker.ui.analytics
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.BankStatement
 import com.expensetracker.data.ExpenseRepository
@@ -15,6 +17,7 @@ import com.expensetracker.domain.PeriodSummary
 import com.expensetracker.domain.PeriodType
 import com.expensetracker.domain.StatementCheck
 import com.expensetracker.domain.StatementStatus
+import com.expensetracker.ui.AppLocale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,10 +30,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-enum class AnalyticsTab(val label: String) { SPENDING("Spending"), CASH_FLOW("Cash flow") }
+enum class AnalyticsTab(@param:StringRes val label: Int) { SPENDING(R.string.filter_spending), CASH_FLOW(R.string.cash_flow) }
 
 /** Selected tab, shared so other screens (e.g. Home's cash flow card) can open a specific tab. */
 object AnalyticsTabs {
@@ -62,29 +64,6 @@ data class AnalyticsUiState(
 ) {
     val canGoNext: Boolean get() = offset < 0
 
-    val periodLabel: String
-        get() {
-            val period = summary?.period ?: return ""
-            return when (type) {
-                PeriodType.WEEK -> {
-                    val sameMonth = period.start.month == period.end.month
-                    val startText = period.start.format(DateTimeFormatter.ofPattern("MMM d"))
-                    val endText = period.end.format(DateTimeFormatter.ofPattern(if (sameMonth) "d" else "MMM d"))
-                    val year = if (period.end.year != today.year) ", ${period.end.year}" else ""
-                    "$startText – $endText$year"
-                }
-                PeriodType.MONTH -> period.start.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
-                PeriodType.YEAR -> period.start.year.toString()
-            }
-        }
-
-    val comparedTo: String
-        get() = when (type) {
-            PeriodType.WEEK -> "previous week"
-            PeriodType.MONTH -> "previous month"
-            PeriodType.YEAR -> "previous year"
-        }
-
     /** Index of today's column in the time series, when today falls inside the selected period. */
     val todayIndex: Int?
         get() {
@@ -106,9 +85,9 @@ class AnalyticsViewModel(
 
     val uiState: StateFlow<AnalyticsUiState> =
         combine(
-            combine(expenses.expenses, expenses.statements) { e, s -> e to s },
+            combine(expenses.expenses, expenses.statements, AppLocale.current) { e, s, l -> Triple(e, s, l) },
             settings.settings, type, offset, AnalyticsTabs.selected,
-        ) { (entries, statements), prefs, type, offset, tab ->
+        ) { (entries, statements, locale), prefs, type, offset, tab ->
             val today = LocalDate.now()
             val all = Analytics.spending(entries)
             val period = Period.of(type, today, offset)
@@ -116,15 +95,15 @@ class AnalyticsViewModel(
             AnalyticsUiState(
                 loading = false,
                 tab = tab,
-                cashFlow = CashFlow.summarize(entries, period, today),
+                cashFlow = CashFlow.summarize(entries, period, today, locale),
                 statements = StatementCheck.forPeriod(statements, entries, period),
                 bankBalance = StatementCheck.latestBalance(statements),
                 currency = prefs.currency,
                 type = type,
                 offset = offset,
                 today = today,
-                summary = Analytics.summarize(all, period, today),
-                trend = Analytics.monthlySeries(all, trendEnd, 6),
+                summary = Analytics.summarize(all, period, today, locale),
+                trend = Analytics.monthlySeries(all, trendEnd, 6, locale),
             )
         }
             .flowOn(Dispatchers.Default)

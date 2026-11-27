@@ -2,6 +2,7 @@
 
 An Android app for tracking daily expenses and income, and seeing where your money goes and what's left, with interactive charts.
 Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the device; there's no account and no internet use.
+Available in **English** and **ខ្មែរ (Khmer)**.
 
 <p>
   <img src="docs/screenshots/1_home.png" width="230" alt="Home screen">
@@ -23,9 +24,15 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
   <img src="docs/screenshots/8_import_done.png" width="230" alt="Cash flow vs statement after import">
   <img src="docs/screenshots/10_cash_flow_statement.png" width="230" alt="Bank statement and balance in cash flow">
 </p>
+<p>
+  <img src="docs/screenshots/0_welcome_km.png" width="230" alt="Welcome screen in Khmer, with the English / Khmer switch">
+  <img src="docs/screenshots/1_home_km.png" width="230" alt="Home screen in Khmer">
+  <img src="docs/screenshots/9_cash_flow_km.png" width="230" alt="Cash flow in Khmer">
+</p>
 
 ## Features
 
+- **English and ខ្មែរ (Khmer)**: pick the language on the welcome screen or in Settings → Language, or follow the phone's language. Every screen, message, plural, date, month and weekday name and chart label is translated, and Khmer text gets taller line spacing so its vowels and subscripts are never clipped. The choice is kept across restarts and shows in Android's per-app language settings (Android 13+).
 - **Smooth start**: a short welcome on first launch picks your currency from the phone's region and sets an optional budget. A splash screen avoids any theme flash, there are fade-through transitions and predictive back, totals glide to new values, and key actions give haptic feedback.
 - **Fast entry**: **Quick fill** chips for things you enter often (one tap fills note, category and amount), the **category is picked from your note** as you type ("Grab" → Transport), "Saved · **Undo**" after every save, edit or delete, **Duplicate** an entry, switch between Expense and Income, big amount field, color-coded categories (12 for spending, 7 for income: Salary, Business, Interest & investments, Refunds, Gifts received, Transfers in, Other), quick "Today / Yesterday" dates, optional note.
 - **Home dashboard**: this month's total vs. last month, a monthly budget progress bar, today and this week, last 7 days chart, top categories and recent transactions.
@@ -51,7 +58,7 @@ Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the d
   - The statement is saved. The Cash flow tab shows your **bank balance** and checks that your cash flow for the statement's dates still matches it. If it doesn't, it says why: other entries in those dates (sample data or typed in by hand), or statement rows that weren't imported.
   - Change a category once and it's remembered for that merchant in future imports. Re-importing the same file won't create duplicates.
   - The file is read on the phone; nothing is uploaded.
-- **Settings**: 12 currencies (USD, EUR, KHR, THB, VND, …), monthly budget, light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet, add or remove sample data, remove imported transactions (to re-import), delete all.
+- **Settings**: 12 currencies (USD, EUR, KHR, THB, VND, …), monthly budget, language (English / ខ្មែរ / phone language), light/dark/system theme, Material You dynamic color (Android 12+), CSV export through the share sheet, add or remove sample data, remove imported transactions (to re-import), delete all.
 
 ## Install on your phone
 
@@ -77,6 +84,7 @@ for the App Bundle, store graphics in [`docs/play-store/`](docs/play-store/), an
 | Area | Choice |
 |---|---|
 | UI | Jetpack Compose, Material 3, edge-to-edge, light/dark and dynamic color |
+| Languages | English (`values/`) and Khmer (`values-km/`) string resources with plurals; per-app language through AppCompat (`locales_config.xml`) |
 | Charts | Hand-written with Compose `Canvas` (no chart library): donut, column, smoothed line |
 | Storage | Room (expenses, learned merchant categories), DataStore Preferences (settings); exported schemas in `app/schemas` |
 | Statement import | Own CSV and .xlsx readers; [PdfBox-Android](https://github.com/TomRoush/PdfBox-Android) for PDF text |
@@ -113,4 +121,6 @@ app/src/main/java/com/expensetracker/
 - `SmoothFlowsTest`: first-run setup, existing users skipping it, quick fill, Save → Undo, category from the note, duplicate, logging a recurring item, search across months
 - `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1, v2 and v3
 - `ImportFlowTest`: picks a CSV statement, checks it adds up (and that ⇅ breaks and restores the check), imports it, confirms the cash flow matches the statement, then re-imports to check for duplicates
-- `Light/DarkScreenshotTest`: drives the real app with sample data and captures every screen (Robolectric + Roborazzi, no emulator needed)
+- `Light/Dark/KhmerScreenshotTest`: drives the real app with sample data and captures every screen, in English and in Khmer (Robolectric + Roborazzi, no emulator needed)
+- `TranslationCatalogTest`: every English string has a Khmer translation with the same placeholders, and Khmer plurals use the one form Android asks for
+- `KhmerLocaleTest`: Khmer resources, plurals and month names are used when the phone (or app) is set to Khmer

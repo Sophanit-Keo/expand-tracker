@@ -51,17 +51,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.domain.CategoryTotal
 import com.expensetracker.domain.PeriodSummary
 import com.expensetracker.domain.PeriodType
 import com.expensetracker.ui.AppViewModelProvider
 import com.expensetracker.ui.Prefill
+import com.expensetracker.ui.appLocale
 import com.expensetracker.ui.charts.BarChart
 import com.expensetracker.ui.charts.DonutChart
 import com.expensetracker.ui.charts.DonutSlice
@@ -74,13 +78,18 @@ import com.expensetracker.ui.components.RoundedProgressBar
 import com.expensetracker.ui.components.SectionCard
 import com.expensetracker.ui.components.animatedAmount
 import com.expensetracker.ui.components.color
+import com.expensetracker.ui.dateFormatter
+import com.expensetracker.ui.displayTitle
+import com.expensetracker.ui.monthYearText
+import com.expensetracker.ui.shortDateText
 import com.expensetracker.ui.theme.Decrease
 import com.expensetracker.ui.theme.Increase
+import com.expensetracker.ui.title
+import com.expensetracker.ui.word
 import com.expensetracker.util.formatCompact
 import com.expensetracker.util.formatMoney
-import com.expensetracker.util.shortDate
+import java.time.LocalDate
 import java.time.format.TextStyle
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -100,7 +109,7 @@ fun AnalyticsScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("Analytics") },
+                    title = { Text(stringResource(R.string.analytics_title)) },
                     scrollBehavior = scrollBehavior,
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
@@ -115,7 +124,7 @@ fun AnalyticsScreen(
                         Tab(
                             selected = state.tab == tab,
                             onClick = { viewModel.setTab(tab) },
-                            text = { Text(tab.label, style = MaterialTheme.typography.titleSmall) },
+                            text = { Text(stringResource(tab.label), style = MaterialTheme.typography.titleSmall) },
                             unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.testTag("tab_${tab.name.lowercase()}"),
                         )
@@ -173,11 +182,11 @@ fun AnalyticsContent(
                         selected = state.type == type,
                         onClick = { onTypeChange(type) },
                         shape = SegmentedButtonDefaults.itemShape(index, PeriodType.entries.size),
-                    ) { Text(type.label) }
+                    ) { Text(type.title()) }
                 }
             }
             Spacer(Modifier.height(12.dp))
-            PeriodNavigator(state.periodLabel, onPrevious, onNext, state.canGoNext)
+            PeriodNavigator(state.periodLabelText(), onPrevious, onNext, state.canGoNext)
         }
 
         if (summary == null) return@LazyColumn
@@ -192,30 +201,30 @@ fun AnalyticsContent(
             item {
                 EmptyState(
                     icon = Icons.Rounded.Insights,
-                    title = "No spending in this period",
-                    message = "Pick another ${state.type.label.lowercase()} or add expenses to see your breakdown.",
+                    title = stringResource(R.string.no_spending_period),
+                    message = stringResource(R.string.no_spending_period_message, state.type.word()),
                 )
             }
         } else {
             item { CategoryBreakdownCard(summary.byCategory, summary.total, state.currency) }
             item {
                 SectionCard(
-                    title = "Spending over time",
-                    subtitle = if (state.type == PeriodType.YEAR) "Monthly totals · tap a column" else "Daily totals · tap a column",
+                    title = stringResource(R.string.spending_over_time),
+                    subtitle = stringResource(if (state.type == PeriodType.YEAR) R.string.monthly_totals_tap else R.string.daily_totals_tap),
                 ) {
                     BarChart(
                         points = summary.series,
                         valueFormatter = { formatMoney(it, state.currency) },
                         axisFormatter = { formatCompact(it, state.currency) },
                         highlightIndex = null,
-                        tooltipLabel = { index -> seriesTooltipLabel(state, index) },
+                        tooltipLabel = seriesLabeler(state.type, summary.period.start),
                     )
                 }
             }
         }
 
         item {
-            SectionCard(title = "6-month trend", subtitle = "Total spending per month · tap a point") {
+            SectionCard(title = stringResource(R.string.trend_6_month), subtitle = stringResource(R.string.trend_6_month_subtitle)) {
                 LineChart(
                     points = state.trend,
                     valueFormatter = { formatMoney(it, state.currency) },
@@ -230,27 +239,59 @@ fun AnalyticsContent(
     }
 }
 
-private fun seriesTooltipLabel(state: AnalyticsUiState, index: Int): String {
-    val period = state.summary?.period ?: return ""
-    return when (state.type) {
-        PeriodType.YEAR -> period.start.plusMonths(index.toLong()).month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-        else -> shortDate(period.start.plusDays(index.toLong()))
+/** Labels a chart slot in the selected period: a month name for a year, a short date otherwise. */
+@Composable
+internal fun seriesLabeler(type: PeriodType, start: LocalDate): (Int) -> String {
+    val locale = appLocale()
+    val day = dateFormatter(R.string.pattern_short_day)
+    return { index ->
+        when (type) {
+            PeriodType.YEAR -> start.plusMonths(index.toLong()).month.getDisplayName(TextStyle.FULL, locale)
+            else -> day.format(start.plusDays(index.toLong()))
+        }
     }
 }
+
+/** "Nov 3 – 9", "Oct 27 – Nov 2", "November 2026" or "2026", in the app's language. */
+@Composable
+internal fun AnalyticsUiState.periodLabelText(): String {
+    val period = summary?.period ?: return ""
+    val sameMonth = period.start.month == period.end.month
+    val startFormat = dateFormatter(if (sameMonth) R.string.pattern_week_start_same_month else R.string.pattern_short_day)
+    val endFormat = dateFormatter(if (sameMonth) R.string.pattern_week_end_same_month else R.string.pattern_short_day)
+    val month = monthYearText(period.start)
+    val range = "${startFormat.format(period.start)} – ${endFormat.format(period.end)}"
+    val rangeWithYear = stringResource(R.string.with_year, range, period.end.year)
+    return when (type) {
+        PeriodType.WEEK -> if (period.end.year != today.year) rangeWithYear else range
+        PeriodType.MONTH -> month
+        PeriodType.YEAR -> period.start.year.toString()
+    }
+}
+
+/** "previous week" etc., for "vs previous week" style comparisons. */
+@Composable
+internal fun AnalyticsUiState.comparedToText(): String = stringResource(
+    when (type) {
+        PeriodType.WEEK -> R.string.compared_previous_week
+        PeriodType.MONTH -> R.string.compared_previous_month
+        PeriodType.YEAR -> R.string.compared_previous_year
+    },
+)
 
 @Composable
 private fun SummaryCard(summary: PeriodSummary, state: AnalyticsUiState) {
     SectionCard {
-        Text("Total spent", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.total_spent), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
         Text(formatMoney(animatedAmount(summary.total), state.currency), style = MaterialTheme.typography.displaySmall)
         Spacer(Modifier.height(8.dp))
-        ChangeChip(summary.changePercent, comparedTo = state.comparedTo)
+        ChangeChip(summary.changePercent, comparedTo = state.comparedToText())
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth()) {
-            MiniStat("Daily average", formatMoney(summary.dailyAverage, state.currency), Modifier.weight(1f))
-            MiniStat("Transactions", summary.count.toString(), Modifier.weight(1f))
-            MiniStat("Largest", summary.largest?.let { formatMoney(it.amount, state.currency) } ?: "—", Modifier.weight(1f))
+            MiniStat(stringResource(R.string.daily_average), formatMoney(summary.dailyAverage, state.currency), Modifier.weight(1f))
+            MiniStat(stringResource(R.string.transactions), summary.count.toString(), Modifier.weight(1f))
+            MiniStat(stringResource(R.string.largest), summary.largest?.let { formatMoney(it.amount, state.currency) } ?: "—", Modifier.weight(1f))
         }
     }
 }
@@ -274,16 +315,16 @@ private fun CategoryBreakdownCard(categories: List<CategoryTotal>, total: Double
     val rest = categories.drop(shown.size)
     val entries = buildList {
         shown.forEach {
-            add(LegendEntry(it.category.label, it.total, it.share, it.category.color, "${it.count} ${if (it.count == 1) "expense" else "expenses"}"))
+            add(LegendEntry(it.category.title(), it.total, it.share, it.category.color, pluralStringResource(R.plurals.expenses_count, it.count, it.count)))
         }
         if (rest.isNotEmpty()) {
             val sum = rest.sumOf { it.total }
-            add(LegendEntry("${rest.size} more categories", sum, (sum / total).toFloat(), OtherSliceColor, rest.joinToString { it.category.label }))
+            add(LegendEntry(pluralStringResource(R.plurals.more_categories, rest.size, rest.size), sum, (sum / total).toFloat(), OtherSliceColor, rest.map { it.category.title() }.joinToString()))
         }
     }
     var selected by remember(categories) { mutableStateOf<Int?>(null) }
 
-    SectionCard(title = "By category", subtitle = "Tap a slice or row to focus") {
+    SectionCard(title = stringResource(R.string.by_category), subtitle = stringResource(R.string.by_category_hint)) {
         DonutChart(
             slices = entries.map { DonutSlice(it.total.toFloat(), it.color) },
             selectedIndex = selected,
@@ -295,7 +336,7 @@ private fun CategoryBreakdownCard(categories: List<CategoryTotal>, total: Double
             val focus = selected?.let { entries.getOrNull(it) }
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(130.dp)) {
                 Text(
-                    focus?.let { "${(it.share * 100).roundToInt()}%" } ?: "Total",
+                    focus?.let { "${(it.share * 100).roundToInt()}%" } ?: stringResource(R.string.total),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -306,7 +347,7 @@ private fun CategoryBreakdownCard(categories: List<CategoryTotal>, total: Double
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    focus?.label ?: "${categories.size} ${if (categories.size == 1) "category" else "categories"}",
+                    focus?.label ?: pluralStringResource(R.plurals.categories_count, categories.size, categories.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -375,22 +416,22 @@ private fun CategoryBreakdownCard(categories: List<CategoryTotal>, total: Double
 @Composable
 private fun InsightsCard(summary: PeriodSummary, state: AnalyticsUiState) {
     val currency = state.currency
-    SectionCard(title = "Insights") {
+    SectionCard(title = stringResource(R.string.insights)) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             summary.byCategory.firstOrNull()?.let { top ->
                 InsightRow(
                     Icons.Rounded.EmojiEvents,
                     MaterialTheme.colorScheme.primary,
-                    "${top.category.label} is your biggest category",
-                    "${(top.share * 100).roundToInt()}% of spending · ${formatMoney(top.total, currency)}",
+                    stringResource(R.string.insight_top_category, top.category.title()),
+                    stringResource(R.string.insight_top_category_detail, (top.share * 100).roundToInt(), formatMoney(top.total, currency)),
                 )
             }
             summary.largest?.let { largest ->
                 InsightRow(
                     Icons.Rounded.LocalFireDepartment,
                     largest.category.color,
-                    "Largest expense: ${formatMoney(largest.amount, currency)}",
-                    "${largest.title} · ${shortDate(largest.date)}",
+                    stringResource(R.string.insight_largest, formatMoney(largest.amount, currency)),
+                    "${largest.displayTitle()} · ${shortDateText(largest.date)}",
                 )
             }
             if (state.type != PeriodType.WEEK) {
@@ -398,30 +439,30 @@ private fun InsightsCard(summary: PeriodSummary, state: AnalyticsUiState) {
                     InsightRow(
                         Icons.Rounded.CalendarToday,
                         MaterialTheme.colorScheme.tertiary,
-                        "You spend the most on ${day.getDisplayName(TextStyle.FULL, Locale.getDefault())}s",
-                        "Based on ${summary.count} expenses this ${state.type.label.lowercase()}",
+                        stringResource(R.string.insight_weekday, day.getDisplayName(TextStyle.FULL, appLocale())),
+                        pluralStringResource(R.plurals.insight_weekday_detail, summary.count, summary.count, state.type.word()),
                     )
                 }
             }
             InsightRow(
                 Icons.Rounded.Speed,
                 MaterialTheme.colorScheme.secondary,
-                "About ${formatMoney(summary.dailyAverage, currency)} per day",
-                "Average over the days elapsed in this ${state.type.label.lowercase()}",
+                stringResource(R.string.insight_per_day, formatMoney(summary.dailyAverage, currency)),
+                stringResource(R.string.insight_per_day_detail, state.type.word()),
             )
             summary.changePercent?.let { change ->
                 val up = change > 0
                 InsightRow(
                     if (up) Icons.AutoMirrored.Rounded.TrendingUp else Icons.AutoMirrored.Rounded.TrendingDown,
                     if (up) Increase else Decrease,
-                    if (up) "Spending is up ${abs(change).roundToInt()}%" else "Spending is down ${abs(change).roundToInt()}%",
-                    "Compared with the ${state.comparedTo} (${formatMoney(summary.previousTotal, currency)})",
+                    stringResource(if (up) R.string.insight_up else R.string.insight_down, abs(change).roundToInt()),
+                    stringResource(R.string.insight_compared, state.comparedToText(), formatMoney(summary.previousTotal, currency)),
                 )
             } ?: InsightRow(
                 Icons.Rounded.BarChart,
                 MaterialTheme.colorScheme.outline,
-                "No data for the ${state.comparedTo}",
-                "Keep tracking to unlock comparisons",
+                stringResource(R.string.insight_no_data, state.comparedToText()),
+                stringResource(R.string.insight_keep_tracking),
             )
         }
     }

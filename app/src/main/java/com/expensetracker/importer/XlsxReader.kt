@@ -14,7 +14,7 @@ import javax.xml.parsers.SAXParserFactory
 object XlsxReader {
     private const val MAX_PART_BYTES = 30 * 1024 * 1024
 
-    class FormatException(message: String) : Exception(message)
+    class FormatException(val problem: ImportProblem) : Exception(problem.name)
 
     fun read(bytes: ByteArray): List<List<String>> {
         val parts = unzip(bytes)
@@ -23,12 +23,12 @@ object XlsxReader {
         val sheets = sheetOrder(parts).ifEmpty {
             parts.keys.filter { it.startsWith("xl/worksheets/") && it.endsWith(".xml") }.sorted()
         }
-        if (sheets.isEmpty()) throw FormatException("This Excel file has no worksheets.")
+        if (sheets.isEmpty()) throw FormatException(ImportProblem.EXCEL_NO_SHEETS)
         for (sheet in sheets) {
             val rows = readSheet(parts[sheet] ?: continue, sharedStrings, dateStyles)
             if (rows.count { row -> row.any { it.isNotBlank() } } >= 2) return rows
         }
-        throw FormatException("The worksheets in this file are empty.")
+        throw FormatException(ImportProblem.EXCEL_EMPTY)
     }
 
     private fun unzip(bytes: ByteArray): Map<String, ByteArray> {
@@ -39,12 +39,12 @@ object XlsxReader {
                 val name = entry.name.removePrefix("/")
                 if (name.startsWith("xl/") && name.endsWith(".xml") || name.endsWith(".rels")) {
                     val data = zip.readBytes()
-                    if (data.size > MAX_PART_BYTES) throw FormatException("This Excel file is too large to import.")
+                    if (data.size > MAX_PART_BYTES) throw FormatException(ImportProblem.EXCEL_TOO_LARGE)
                     parts[name] = data
                 }
             }
         }
-        if (parts.isEmpty()) throw FormatException("This doesn't look like an Excel (.xlsx) file.")
+        if (parts.isEmpty()) throw FormatException(ImportProblem.NOT_XLSX)
         return parts
     }
 

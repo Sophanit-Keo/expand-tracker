@@ -136,7 +136,7 @@ class ImporterIntegrationTest {
     fun oldXlsFilesGetAHelpfulMessage() = runBlocking {
         val bytes = byteArrayOf(0xD0.toByte(), 0xCF.toByte(), 0x11, 0xE0.toByte(), 0, 0, 0, 0)
         val content = importer.load(StatementImporter.PickedFile("statement.xls", bytes))
-        assertTrue((content as StatementContent.Unsupported).message.contains(".xlsx"))
+        assertEquals(ImportProblem.OLD_EXCEL, (content as StatementContent.Unsupported).problem)
     }
 
     /** v3 (cash flow release) upgrades to v4: statements table, and entries keep their data. */

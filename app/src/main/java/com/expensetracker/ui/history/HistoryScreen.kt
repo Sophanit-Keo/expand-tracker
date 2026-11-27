@@ -46,6 +46,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,29 +57,36 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
 import com.expensetracker.data.Expense
 import com.expensetracker.ui.AppViewModelProvider
+import com.expensetracker.ui.UiText
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.ExpenseRow
 import com.expensetracker.ui.components.PeriodNavigator
 import com.expensetracker.ui.components.icon
+import com.expensetracker.ui.friendlyDateText
+import com.expensetracker.ui.monthYearText
 import com.expensetracker.ui.theme.CashInText
 import com.expensetracker.ui.theme.card
+import com.expensetracker.ui.title
+import com.expensetracker.ui.titleText
 import com.expensetracker.util.formatMoney
-import com.expensetracker.util.friendlyDate
 import kotlinx.coroutines.launch
-import java.time.format.DateTimeFormatter
 
-private val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +96,10 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    // Search matches category names in the language on screen, not only the English ones.
+    val categoryNames = Category.entries.associateWith { it.title() }
+    LaunchedEffect(categoryNames) { viewModel.setCategoryNames(categoryNames) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -97,10 +109,10 @@ fun HistoryScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                title = { Text("History") },
+                title = { Text(stringResource(R.string.history_title)) },
                 actions = {
                     IconButton(onClick = onImport, modifier = Modifier.testTag("history_import")) {
-                        Icon(Icons.Rounded.UploadFile, contentDescription = "Import bank statement")
+                        Icon(Icons.Rounded.UploadFile, contentDescription = stringResource(R.string.import_bank_statement))
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -125,25 +137,28 @@ fun HistoryScreen(
                 AnimatedContent(targetState = state.searchingAllMonths, label = "periodHeader") { searching ->
                     if (searching) {
                         Text(
-                            "Results from all months",
+                            stringResource(R.string.results_all_months),
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
                         )
                     } else {
                         PeriodNavigator(
-                            label = state.month.format(monthFormatter),
+                            label = monthYearText(state.month),
                             onPrevious = viewModel::previousMonth,
                             onNext = viewModel::nextMonth,
                             canGoNext = state.canGoNext,
                         )
                     }
                 }
+                val outText = stringResource(R.string.history_out, formatMoney(state.spent, state.currency))
+                val inText = stringResource(R.string.history_in, formatMoney(state.received, state.currency))
+                val countText = pluralStringResource(R.plurals.transactions_count, state.count, state.count)
                 Text(
                     buildList {
-                        if (state.spent > 0 || state.received == 0.0) add("−${formatMoney(state.spent, state.currency)} out")
-                        if (state.received > 0) add("+${formatMoney(state.received, state.currency)} in")
-                        add("${state.count} ${if (state.count == 1) "transaction" else "transactions"}")
+                        if (state.spent > 0 || state.received == 0.0) add(outText)
+                        if (state.received > 0) add(inText)
+                        add(countText)
                     }.joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -165,10 +180,10 @@ fun HistoryScreen(
                 item {
                     EmptyState(
                         icon = Icons.Rounded.SearchOff,
-                        title = if (state.isFiltered) "No matches" else "Nothing here yet",
-                        message = if (state.searchingAllMonths) "Nothing matches “${state.query.trim()}” in any month."
-                        else if (state.isFiltered) "Try a different search or category."
-                        else "No expenses recorded in ${state.month.format(monthFormatter)}.",
+                        title = stringResource(if (state.isFiltered) R.string.no_matches else R.string.nothing_here),
+                        message = if (state.searchingAllMonths) stringResource(R.string.no_match_any_month, state.query.trim())
+                        else if (state.isFiltered) stringResource(R.string.try_different)
+                        else stringResource(R.string.no_entries_in_month, monthYearText(state.month)),
                     )
                 }
             }
@@ -182,7 +197,7 @@ fun HistoryScreen(
                             .padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
                     ) {
                         Text(
-                            friendlyDate(group.date),
+                            friendlyDateText(group.date),
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier.weight(1f),
                         )
@@ -216,8 +231,8 @@ fun HistoryScreen(
                                 scope.launch {
                                     snackbar.currentSnackbarData?.dismiss()
                                     val result = snackbar.showSnackbar(
-                                        message = "Deleted “${expense.title}”",
-                                        actionLabel = "Undo",
+                                        message = UiText.Res(R.string.msg_deleted, expense.titleText()).resolve(context),
+                                        actionLabel = context.getString(R.string.undo),
                                         duration = SnackbarDuration.Short,
                                     )
                                     if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
@@ -250,12 +265,12 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
         value = query,
         onValueChange = onQueryChange,
         modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("Search notes or categories") },
+        placeholder = { Text(stringResource(R.string.search_hint)) },
         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
                 IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                    Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.clear_search))
                 }
             }
         },
@@ -272,7 +287,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 
 @Composable
 private fun TypeFilter(selected: EntryType?, onSelect: (EntryType?) -> Unit) {
-    val options = listOf(null to "All", EntryType.EXPENSE to "Spending", EntryType.INCOME to "Income")
+    val options = listOf(null to stringResource(R.string.filter_all), EntryType.EXPENSE to stringResource(R.string.filter_spending), EntryType.INCOME to stringResource(R.string.type_income))
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         options.forEachIndexed { index, (type, label) ->
             SegmentedButton(
@@ -291,7 +306,7 @@ private fun CategoryFilters(selected: Category?, type: EntryType?, onSelect: (Ca
             FilterChip(
                 selected = selected == null,
                 onClick = { onSelect(null) },
-                label = { Text("All") },
+                label = { Text(stringResource(R.string.filter_all)) },
                 shape = CircleShape,
             )
         }
@@ -299,7 +314,7 @@ private fun CategoryFilters(selected: Category?, type: EntryType?, onSelect: (Ca
             FilterChip(
                 selected = selected == category,
                 onClick = { onSelect(if (selected == category) null else category) },
-                label = { Text(category.label) },
+                label = { Text(category.title()) },
                 leadingIcon = { Icon(category.icon, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) },
                 shape = CircleShape,
             )
@@ -333,7 +348,7 @@ private fun SwipeToDeleteRow(
             ) {
                 Icon(
                     Icons.Rounded.DeleteOutline,
-                    contentDescription = "Delete",
+                    contentDescription = stringResource(R.string.delete),
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
@@ -347,7 +362,7 @@ private fun SwipeToDeleteRow(
             ExpenseRow(
                 expense = expense,
                 currency = currency,
-                supportingText = expense.category.label,
+                supportingText = expense.category.title(),
                 onClick = onClick,
                 modifier = Modifier.padding(vertical = 2.dp),
             )

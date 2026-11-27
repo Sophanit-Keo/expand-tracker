@@ -14,6 +14,7 @@ import com.expensetracker.domain.CategoryTotal
 import com.expensetracker.domain.ChartPoint
 import com.expensetracker.domain.Period
 import com.expensetracker.domain.PeriodType
+import com.expensetracker.ui.AppLocale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,7 +32,7 @@ data class HomeUiState(
     val loading: Boolean = true,
     val currency: AppCurrency = AppCurrency.USD,
     val today: LocalDate = LocalDate.now(),
-    val monthName: String = "",
+
     val monthTotal: Double = 0.0,
     val previousMonthTotal: Double = 0.0,
     val budget: Double = 0.0,
@@ -56,7 +57,7 @@ class HomeViewModel(
     private val settings: SettingsRepository,
 ) : ViewModel() {
 
-    val uiState: StateFlow<HomeUiState> = combine(expenses.expenses, settings.settings) { entries, prefs ->
+    val uiState: StateFlow<HomeUiState> = combine(expenses.expenses, settings.settings, AppLocale.current) { entries, prefs, locale ->
         val today = LocalDate.now()
         val all = Analytics.spending(entries)
         val month = Period.of(PeriodType.MONTH, today)
@@ -74,19 +75,19 @@ class HomeViewModel(
             loading = false,
             currency = prefs.currency,
             today = today,
-            monthName = today.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
+
             monthTotal = Analytics.total(monthItems),
             previousMonthTotal = Analytics.total(previousSameSpan),
             budget = prefs.monthlyBudget,
             todayTotal = Analytics.total(all.filter { it.date == today }),
             weekTotal = Analytics.total(Analytics.inRange(all, week.start, today)),
             last7Days = Analytics.dailySeries(all, today.minusDays(6), today) {
-                if (it == today) "Today" else it.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                it.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
             },
             topCategories = Analytics.byCategory(monthItems).take(3),
             recent = entries.take(6),
             isEmpty = entries.isEmpty(),
-            cashFlow = CashFlow.summarize(entries, month, today).takeIf { it.hasIncome },
+            cashFlow = CashFlow.summarize(entries, month, today, locale).takeIf { it.hasIncome },
         )
     }
         .flowOn(Dispatchers.Default)

@@ -276,15 +276,16 @@ object TableMapper {
         }
 
     /** Header text for each column, or "Column A", "Column B", … */
+    /** Header text per column, blank where the file has none (the screen then says "Column B"). */
     fun columnLabels(rows: List<List<String>>, headerRow: Int): List<String> {
         val width = rows.maxOfOrNull { it.size } ?: 0
         val header = rows.getOrNull(headerRow)
         return (0 until width).map { i ->
-            header?.getOrNull(i)?.takeIf { it.isNotBlank() } ?: "Column ${columnLetter(i)}"
+            header?.getOrNull(i)?.trim().orEmpty()
         }
     }
 
-    private fun columnLetter(index: Int): String {
+    fun columnLetter(index: Int): String {
         var n = index + 1
         val sb = StringBuilder()
         while (n > 0) {

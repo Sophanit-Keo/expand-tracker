@@ -1,5 +1,6 @@
 package com.expensetracker.screenshots
 
+import androidx.annotation.StringRes
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
@@ -12,6 +13,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.expensetracker.ExpenseApp
 import com.expensetracker.MainActivity
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.SampleData
 import com.expensetracker.ui.analytics.AnalyticsTab
@@ -65,52 +67,55 @@ abstract class AppScreenshotTest(
         compose.onRoot().captureRoboImage("$directory/$name$suffix.png")
     }
 
-    private fun open(route: String, waitForText: String) {
+    /** Text in the language the test runs in, so the same walk-through works in English and Khmer. */
+    private fun t(@StringRes id: Int): String = compose.activity.getString(id)
+
+    private fun open(route: String, @StringRes waitFor: Int) {
         compose.onNode(hasTestTag("nav_$route")).performClick()
-        compose.waitUntilAtLeastOneExists(hasText(waitForText), timeoutMillis = 10_000)
+        compose.waitUntilAtLeastOneExists(hasText(t(waitFor)), timeoutMillis = 10_000)
     }
 
-    private fun scrollTo(text: String) {
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText(text))
+    private fun scrollTo(@StringRes id: Int) {
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText(t(id)))
     }
 
     @Test
     fun allScreens() {
-        compose.waitUntilAtLeastOneExists(hasText("Spent in", substring = true), timeoutMillis = 10_000)
+        compose.waitUntilAtLeastOneExists(hasText(t(R.string.spent_in).substringBefore("%").trim(), substring = true), timeoutMillis = 10_000)
         shoot("1_home")
-        scrollTo("Recent transactions")
+        scrollTo(R.string.recent_transactions)
         shoot("1b_home_scrolled")
 
-        open("analytics", "By category")
+        open("analytics", R.string.by_category)
         shoot("2_analytics")
-        scrollTo("Spending over time")
+        scrollTo(R.string.spending_over_time)
         shoot("2b_analytics_charts")
-        scrollTo("Insights")
+        scrollTo(R.string.insights)
         shoot("2c_analytics_insights")
 
         compose.onNode(hasTestTag("tab_cash_flow")).performClick()
-        compose.waitUntilAtLeastOneExists(hasText("Smart insights"), timeoutMillis = 10_000)
+        compose.waitUntilAtLeastOneExists(hasText(t(R.string.smart_insights)), timeoutMillis = 10_000)
         shoot("9_cash_flow")
-        scrollTo("Cash in vs cash out")
+        scrollTo(R.string.cash_in_vs_out)
         shoot("9b_cash_flow_charts")
-        scrollTo("Where your money comes from")
+        scrollTo(R.string.money_comes_from)
         shoot("9c_cash_flow_recurring")
-        scrollTo("Last 6 months")
+        scrollTo(R.string.last_6_months)
         shoot("9d_cash_flow_months")
 
-        open("history", "Search notes or categories")
+        open("history", R.string.search_hint)
         shoot("3_history")
 
         compose.onNode(hasTestTag("add_expense")).performClick()
-        compose.waitUntilAtLeastOneExists(hasText("New expense"), timeoutMillis = 10_000)
+        compose.waitUntilAtLeastOneExists(hasText(t(R.string.edit_title_new_expense)), timeoutMillis = 10_000)
         shoot("4_add_expense")
         compose.onNode(hasTestTag("type_income")).performClick()
-        compose.waitUntilAtLeastOneExists(hasText("New income"), timeoutMillis = 10_000)
+        compose.waitUntilAtLeastOneExists(hasText(t(R.string.edit_title_new_income)), timeoutMillis = 10_000)
         shoot("4b_add_income")
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.waitUntilAtLeastOneExists(hasTestTag("nav_settings"), timeoutMillis = 10_000)
 
-        open("settings", "Monthly budget")
+        open("settings", R.string.monthly_budget)
         shoot("5_settings")
     }
 }
@@ -127,3 +132,7 @@ class PlayStoreScreenshotTest : AppScreenshotTest(
 
 @Config(qualifiers = "+night")
 class DarkScreenshotTest : AppScreenshotTest("_dark")
+
+/** The same screens in Khmer (phone language set to Khmer). */
+@Config(qualifiers = "km-w400dp-h880dp-xxhdpi")
+class KhmerScreenshotTest : AppScreenshotTest("_km")

@@ -3,6 +3,7 @@ package com.expensetracker.ui.edit
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
@@ -13,6 +14,8 @@ import com.expensetracker.importer.CategoryGuesser
 import com.expensetracker.ui.AppMessage
 import com.expensetracker.ui.AppMessages
 import com.expensetracker.ui.Prefill
+import com.expensetracker.ui.UiText
+import com.expensetracker.ui.titleText
 import com.expensetracker.util.amountToInput
 import com.expensetracker.util.formatMoney
 import com.expensetracker.util.sanitizeAmountInput
@@ -200,10 +203,10 @@ class EditExpenseViewModel(
             val signed = (if (expense.isIncome) "+" else "−") + formatMoney(amount, current.currency)
             if (before == null) {
                 val id = expenses.add(expense)
-                AppMessages.post(AppMessage("Saved “${expense.title}” · $signed", "Undo") { expenses.delete(expense.copy(id = id)) })
+                AppMessages.post(AppMessage(UiText.Res(R.string.msg_saved, expense.titleText(), signed), UiText.Res(R.string.undo)) { expenses.delete(expense.copy(id = id)) })
             } else {
                 expenses.save(expense)
-                AppMessages.post(AppMessage("Changes saved", "Undo") { expenses.save(before) })
+                AppMessages.post(AppMessage(UiText.Res(R.string.msg_changes_saved), UiText.Res(R.string.undo)) { expenses.save(before) })
             }
             _state.update { it.copy(done = true) }
         }
@@ -213,7 +216,7 @@ class EditExpenseViewModel(
         val expense = original ?: return
         viewModelScope.launch {
             expenses.delete(expense)
-            AppMessages.post(AppMessage("Deleted “${expense.title}”", "Undo") { expenses.save(expense) })
+            AppMessages.post(AppMessage(UiText.Res(R.string.msg_deleted, expense.titleText()), UiText.Res(R.string.undo)) { expenses.save(expense) })
             _state.update { it.copy(done = true) }
         }
     }

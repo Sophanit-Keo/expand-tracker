@@ -27,6 +27,8 @@ private data class Filters(
     val query: String = "",
     val category: Category? = null,
     val type: EntryType? = null,
+    /** Category names as shown on screen, so a Khmer search finds Khmer category names. */
+    val names: Map<Category, String> = emptyMap(),
 )
 
 data class HistoryUiState(
@@ -63,7 +65,8 @@ class HistoryViewModel(
                     (type == null || expense.type == type) &&
                     (category == null || expense.category == category) &&
                     (needle.isEmpty() || expense.note.contains(needle, ignoreCase = true) ||
-                        expense.category.label.contains(needle, ignoreCase = true))
+                        expense.category.label.contains(needle, ignoreCase = true) ||
+                        f.names[expense.category]?.contains(needle, ignoreCase = true) == true)
             }
             HistoryUiState(
                 loading = false,
@@ -92,6 +95,8 @@ class HistoryViewModel(
     fun setQuery(value: String) = filters.update { it.copy(query = value) }
 
     fun setCategory(value: Category?) = filters.update { it.copy(category = value) }
+
+    fun setCategoryNames(names: Map<Category, String>) = filters.update { if (it.names == names) it else it.copy(names = names) }
 
     /** Spending only, income only, or both (null); clears a category that doesn't fit. */
     fun setType(value: EntryType?) = filters.update {

@@ -77,6 +77,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -86,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
@@ -93,9 +95,10 @@ import com.expensetracker.ui.AppViewModelProvider
 import com.expensetracker.ui.Prefill
 import com.expensetracker.ui.components.color
 import com.expensetracker.ui.components.icon
+import com.expensetracker.ui.friendlyDateText
+import com.expensetracker.ui.shortTitle
 import com.expensetracker.ui.theme.card
 import com.expensetracker.util.formatMoney
-import com.expensetracker.util.friendlyDate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -124,19 +127,28 @@ fun EditExpenseScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    val noun = if (state.type == EntryType.INCOME) "income" else "expense"
-                    Text(if (state.isEditing) "Edit $noun" else "New $noun")
+                    val income = state.type == EntryType.INCOME
+                    Text(
+                        stringResource(
+                            when {
+                                state.isEditing && income -> R.string.edit_title_edit_income
+                                state.isEditing -> R.string.edit_title_edit_expense
+                                income -> R.string.edit_title_new_income
+                                else -> R.string.edit_title_new_expense
+                            },
+                        ),
+                    )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onDone) { Icon(Icons.Rounded.Close, contentDescription = "Close") }
+                    IconButton(onClick = onDone) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.close)) }
                 },
                 actions = {
                     if (state.isEditing && !state.loading) {
                         IconButton(onClick = { viewModel.duplicate()?.let(onDuplicate) }) {
-                            Icon(Icons.Rounded.ContentCopy, contentDescription = "Duplicate as a new entry")
+                            Icon(Icons.Rounded.ContentCopy, contentDescription = stringResource(R.string.duplicate_entry))
                         }
                         IconButton(onClick = { confirmDelete = true }) {
-                            Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete")
+                            Icon(Icons.Rounded.DeleteOutline, contentDescription = stringResource(R.string.delete))
                         }
                     }
                 },
@@ -161,9 +173,9 @@ fun EditExpenseScreen(
                 ) {
                     Text(
                         when {
-                            state.isEditing -> "Save changes"
-                            state.type == EntryType.INCOME -> "Save income"
-                            else -> "Save expense"
+                            state.isEditing -> stringResource(R.string.save_changes)
+                            state.type == EntryType.INCOME -> stringResource(R.string.save_income)
+                            else -> stringResource(R.string.save_expense)
                         },
                         style = MaterialTheme.typography.titleMedium,
                     )
@@ -179,7 +191,7 @@ fun EditExpenseScreen(
                 .padding(horizontal = 16.dp),
         ) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
-                listOf(EntryType.EXPENSE to "Expense", EntryType.INCOME to "Income").forEachIndexed { index, (type, label) ->
+                listOf(EntryType.EXPENSE to stringResource(R.string.type_expense), EntryType.INCOME to stringResource(R.string.type_income)).forEachIndexed { index, (type, label) ->
                     SegmentedButton(
                         selected = state.type == type,
                         onClick = { viewModel.onTypeChange(type) },
@@ -203,7 +215,7 @@ fun EditExpenseScreen(
             AnimatedVisibility(visible = !state.isEditing && state.suggestions.isNotEmpty()) {
                 Column {
                     Spacer(Modifier.height(16.dp))
-                    Text("Quick fill", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.quick_fill), style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(state.suggestions, key = { it.note + it.category }) { fill ->
@@ -221,8 +233,8 @@ fun EditExpenseScreen(
                 value = state.note,
                 onValueChange = viewModel::onNoteChange,
                 modifier = Modifier.fillMaxWidth().focusRequester(noteFocus),
-                label = { Text(if (state.type == EntryType.INCOME) "Where from? (optional)" else "What for? (optional)") },
-                placeholder = { Text(if (state.type == EntryType.INCOME) "e.g. Salary, Freelance job" else "e.g. Lunch, Grab, Netflix") },
+                label = { Text(stringResource(if (state.type == EntryType.INCOME) R.string.note_label_income else R.string.note_label_expense)) },
+                placeholder = { Text(stringResource(if (state.type == EntryType.INCOME) R.string.note_hint_income else R.string.note_hint_expense)) },
                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Notes, contentDescription = null) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium,
@@ -232,12 +244,12 @@ fun EditExpenseScreen(
 
             Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Category", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.category), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 AnimatedVisibility(visible = state.categoryAuto, enter = fadeIn(), exit = fadeOut()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Picked from your note", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.category_from_note), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -249,7 +261,7 @@ fun EditExpenseScreen(
             })
 
             Spacer(Modifier.height(24.dp))
-            Text("Date", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.date), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             DateRow(
                 date = state.date,
@@ -276,9 +288,9 @@ fun EditExpenseScreen(
                         viewModel.onDateChange(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())
                     }
                     showDatePicker = false
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.cancel)) } },
         ) {
             DatePicker(state = pickerState)
         }
@@ -288,16 +300,16 @@ fun EditExpenseScreen(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             icon = { Icon(Icons.Rounded.DeleteOutline, contentDescription = null) },
-            title = { Text("Delete this expense?") },
-            text = { Text("This can't be undone.") },
+            title = { Text(stringResource(R.string.delete_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_confirm_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     viewModel.delete()
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -325,7 +337,7 @@ private fun AmountInput(
             .padding(horizontal = 20.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Amount", style = MaterialTheme.typography.labelLarge, color = colors.onPrimaryContainer.copy(alpha = 0.8f))
+        Text(stringResource(R.string.amount), style = MaterialTheme.typography.labelLarge, color = colors.onPrimaryContainer.copy(alpha = 0.8f))
         Spacer(Modifier.height(8.dp))
         val amountStyle = MaterialTheme.typography.displayMedium.copy(color = colors.onPrimaryContainer, textAlign = TextAlign.Start)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
@@ -360,7 +372,7 @@ private fun AmountInput(
         }
         if (isError) {
             Spacer(Modifier.height(6.dp))
-            Text("Enter an amount greater than zero", style = MaterialTheme.typography.bodySmall, color = colors.error)
+            Text(stringResource(R.string.amount_error), style = MaterialTheme.typography.bodySmall, color = colors.error)
         }
     }
 }
@@ -412,7 +424,7 @@ private fun CategoryTile(category: Category, selected: Boolean, onClick: () -> U
             )
         }
         Spacer(Modifier.height(6.dp))
-        val label = category.label.substringBefore(" &")
+        val label = category.shortTitle()
         Text(
             label,
             style = MaterialTheme.typography.labelMedium.let { if (label.length > 10) it.copy(fontSize = 10.sp, letterSpacing = 0.sp) else it },
@@ -437,16 +449,16 @@ private fun DateRow(date: LocalDate, onPick: () -> Unit, onQuickPick: (LocalDate
         ) {
             Icon(Icons.Rounded.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
-            Text(friendlyDate(date, today), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text("Change", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(friendlyDateText(date, today), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.change), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = date == today, onClick = { onQuickPick(today) }, label = { Text("Today") }, shape = CircleShape)
+            FilterChip(selected = date == today, onClick = { onQuickPick(today) }, label = { Text(stringResource(R.string.today)) }, shape = CircleShape)
             FilterChip(
                 selected = date == today.minusDays(1),
                 onClick = { onQuickPick(today.minusDays(1)) },
-                label = { Text("Yesterday") },
+                label = { Text(stringResource(R.string.yesterday)) },
                 shape = CircleShape,
             )
         }

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.expensetracker.R
 import com.expensetracker.domain.ChartPoint
 import com.expensetracker.ui.theme.card
 import kotlin.math.abs
@@ -71,7 +73,9 @@ fun LineChart(
     val axisMax = if (maxValue > 0) niceAxisMax(maxValue) else if (minValue < 0) 0.0 else 1.0
     val axisMin = if (minValue < 0) -niceAxisMax(-minValue) else 0.0
     val ticks = listOf(axisMin, 0.0, axisMax).distinct()
-    val description = points.joinToString(prefix = "Line chart. ") { "${it.label}: ${valueFormatter(it.value)}" }
+    val prefix = stringResource(R.string.chart_line) + " "
+    val pointFormat = stringResource(R.string.chart_point)
+    val description = points.joinToString(prefix = prefix) { pointFormat.format(it.label, valueFormatter(it.value)) }
 
     // Geometry shared by drawing and hit-testing.
     fun geometry(width: Float, heightPx: Float, density: Density): LineGeometry = with(density) {

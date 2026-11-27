@@ -21,6 +21,8 @@ import com.expensetracker.MainActivity
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.Expense
+import com.expensetracker.ui.AppLanguage
+import com.expensetracker.ui.AppLocale
 import com.expensetracker.ui.analytics.AnalyticsTab
 import com.expensetracker.ui.analytics.AnalyticsTabs
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -42,7 +44,7 @@ import java.time.LocalDate
 class SmoothFlowsTest {
     /** Setup is skipped except in the tests about setup itself. */
     @get:org.junit.Rule(order = 0)
-    val skipSetup = SkipFirstRunSetup(except = setOf("firstRunSetupSavesCurrencyAndBudget", "existingUsersSkipSetup"))
+    val skipSetup = SkipFirstRunSetup(except = setOf("firstRunSetupSavesCurrencyAndBudget", "existingUsersSkipSetup", "welcomeScreenSwitchesLanguage"))
 
     @get:org.junit.Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
@@ -84,11 +86,26 @@ class SmoothFlowsTest {
     }
 
     @Test
+    fun welcomeScreenSwitchesLanguage() {
+        prepare(onboarded = false)
+        compose.waitUntilAtLeastOneExists(hasText("Welcome to Expense Tracker"), timeoutMillis = 10_000)
+        assertEquals(AppLanguage.SYSTEM, AppLocale.selected())
+        compose.onNode(hasTestTag("language_khmer")).performClick()
+        // Kept by the system (and AppCompat), so it survives restarts and shows in Android's app language settings.
+        assertEquals(AppLanguage.KHMER, AppLocale.selected())
+        AppLocale.select(AppLanguage.SYSTEM)
+        assertEquals(AppLanguage.SYSTEM, AppLocale.selected())
+    }
+
+    @Test
     fun existingUsersSkipSetup() {
         prepare(onboarded = false, entries = listOf(Expense(amount = 5.0, category = Category.FOOD, note = "Lunch", date = today)))
-        repeat(20) {
+        // Room and DataStore work on their own threads: wait for setup to be marked done.
+        val deadline = System.currentTimeMillis() + 10_000
+        while (!runBlocking { container.settingsRepository.settings.first().onboarded } && System.currentTimeMillis() < deadline) {
             compose.mainClock.advanceTimeBy(100)
-            compose.waitForIdle()
+            compose.waitForIdle() // runs the main-thread work that reacts to the data
+            Thread.sleep(20)
         }
         assertTrue(runBlocking { container.settingsRepository.settings.first().onboarded })
         compose.waitUntilDoesNotExist(hasTestTag("onboarding"), timeoutMillis = 10_000)
@@ -182,5 +199,30 @@ class SmoothFlowsTest {
         compose.onNode(hasSetTextAction()).performTextInput("dentist")
         compose.waitUntilAtLeastOneExists(hasText("Results from all months"), timeoutMillis = 5_000)
         compose.waitUntilAtLeastOneExists(hasText("Dentist"), timeoutMillis = 5_000)
+    }
+}
+
+/** First-run setup on a phone set to Khmer. */
+@OptIn(ExperimentalTestApi::class)
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], qualifiers = "km-w400dp-h880dp-xxhdpi")
+class KhmerWelcomeTest {
+    @get:org.junit.Rule
+    val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test
+    fun welcomeIsInKhmer() {
+        // Settings outlive a single test in the same run: start from a fresh install.
+        val container = ApplicationProvider.getApplicationContext<ExpenseApp>().container
+        runBlocking {
+            container.expenseRepository.clear()
+            container.settingsRepository.setOnboarded(false)
+        }
+        compose.waitUntilAtLeastOneExists(hasText(compose.activity.getString(com.expensetracker.R.string.welcome_title)), timeoutMillis = 10_000)
+        compose.onNodeWithText("សូមស្វាគមន៍មកកាន់កម្មវិធីតាមដានចំណាយ").assertExists()
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../docs/screenshots/0_welcome_km.png")
     }
 }

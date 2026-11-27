@@ -159,7 +159,49 @@ PRIVATE BY DESIGN
 • No internet permission: your data never leaves your phone
 • Export to CSV whenever you like
 
-Also: 12 currencies including USD, EUR, KHR, THB and VND, plus dark mode and Material You colours.
+Also: English and Khmer, 12 currencies including USD, EUR, KHR, THB and VND, plus dark mode and Material You colours.
+```
+
+### Khmer listing (ភាសាខ្មែរ)
+
+The app is fully translated into Khmer, so add a Khmer store listing too: **Main store listing → Manage
+translations → Add your own translation text → Khmer – km-KH**. Use the Khmer screenshots
+(`docs/screenshots/*_km.png`) for that language. Suggested texts:
+
+**App name** (max 30): `តាមដានចំណាយ – លំហូរសាច់ប្រាក់`
+
+**Short description** (max 80):
+`កត់ត្រាចំណាយ និងចំណូល នាំចូលរបាយការណ៍ធនាគារ និងមើលលំហូរសាច់ប្រាក់។`
+
+**Full description:**
+
+```
+ដឹងថាលុយរបស់អ្នកចាយទៅណា និងនៅសល់ប៉ុន្មាន។
+
+តាមដានចំណាយ គឺជាកម្មវិធីគ្រប់គ្រងថវិកាដ៏សាមញ្ញ និងឯកជន។ បន្ថែមការចំណាយបានក្នុងពីរបីវិនាទី
+ឬនាំចូលរបាយការណ៍ធនាគាររបស់អ្នក ហើយទុកឲ្យកម្មវិធីធ្វើការងារដែលនៅសល់។
+
+លំហូរសាច់ប្រាក់ឆ្លាតវៃ
+• ប្រាក់ចូល ប្រាក់ចេញ និងចំនួនដែលនៅសល់ប្រចាំខែ
+• ចំនួនដែលអាចចាយបានក្នុងមួយថ្ងៃ ដោយគិតទាំងប្រាក់ខែ និងវិក្កយបត្រដែលនឹងមកដល់
+• ការព្យាករណ៍ចុងខែតាមល្បឿនចាយបច្ចុប្បន្ន
+• ចំណូល និងវិក្កយបត្រប្រចាំ ត្រូវបានរកឃើញដោយស្វ័យប្រវត្តិ
+
+នាំចូលរបាយការណ៍ធនាគារ
+• ឯកសារ CSV, Excel (.xlsx) និង PDF រួមទាំង PDF ដែលមានពាក្យសម្ងាត់
+• ស្គាល់ជួរឈរ កាលបរិច្ឆេទ និងប្រាក់ចូល/ចេញ ដោយស្វ័យប្រវត្តិ
+• ពិនិត្យសរុប និងសមតុល្យ មុនពេលនាំចូល
+• ប្រតិបត្តិការដែលបាននាំចូលរួច នឹងត្រូវរំលង
+
+ការវិភាគច្បាស់លាស់
+• ការចំណាយតាមប្រភេទ តាមថ្ងៃ និងតាមខែ
+• ថវិកាប្រចាំខែ ជាមួយរបារវឌ្ឍនភាពនៅទំព័រដើម
+
+ឯកជនទាំងស្រុង
+• គ្មានគណនី គ្មានការផ្សាយពាណិជ្ជកម្ម គ្មានការតាមដាន
+• ទិន្នន័យរបស់អ្នកនៅតែលើទូរសព្ទរបស់អ្នក
+
+មានភាសាខ្មែរ និងអង់គ្លេស រូបិយប័ណ្ណ 12 រួមទាំងរៀល (KHR) និងដុល្លារ (USD) និងរចនាប័ទ្មងងឹត។
 ```
 
 ---

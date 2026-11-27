@@ -1,6 +1,5 @@
 package com.expensetracker.ui.components
 
-import com.expensetracker.ui.theme.card
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,15 +33,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Expense
+import com.expensetracker.ui.displayTitle
+import com.expensetracker.ui.theme.CashInText
 import com.expensetracker.ui.theme.Decrease
 import com.expensetracker.ui.theme.Increase
-import com.expensetracker.ui.theme.CashInText
+import com.expensetracker.ui.theme.card
 import com.expensetracker.util.formatMoney
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -104,7 +107,7 @@ fun ExpenseRow(
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                expense.title,
+                expense.displayTitle(),
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -156,8 +159,8 @@ fun ChangeChip(percent: Double?, comparedTo: String, modifier: Modifier = Modifi
             Spacer(Modifier.width(4.dp))
         }
         val text = when {
-            up || down -> "${abs(percent).roundToInt()}% vs $comparedTo"
-            else -> "Same as $comparedTo"
+            up || down -> stringResource(R.string.change_vs, abs(percent).roundToInt(), comparedTo)
+            else -> stringResource(R.string.change_same, comparedTo)
         }
         Text(text, style = MaterialTheme.typography.labelMedium, color = tint)
     }
@@ -210,7 +213,7 @@ fun PeriodNavigator(
 ) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         FilledTonalIconButton(onClick = onPrevious) {
-            Icon(Icons.Rounded.ChevronLeft, contentDescription = "Previous")
+            Icon(Icons.Rounded.ChevronLeft, contentDescription = stringResource(R.string.previous))
         }
         Text(
             label,
@@ -219,7 +222,7 @@ fun PeriodNavigator(
             style = MaterialTheme.typography.titleMedium,
         )
         FilledTonalIconButton(onClick = onNext, enabled = canGoNext) {
-            Icon(Icons.Rounded.ChevronRight, contentDescription = "Next")
+            Icon(Icons.Rounded.ChevronRight, contentDescription = stringResource(R.string.next))
         }
     }
 }

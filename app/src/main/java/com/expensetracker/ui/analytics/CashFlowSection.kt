@@ -42,16 +42,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.EntryType
 import com.expensetracker.domain.CashFlowSummary
 import com.expensetracker.domain.PeriodType
 import com.expensetracker.domain.RecurringItem
 import com.expensetracker.domain.StatementStatus
+import com.expensetracker.ui.AppLocale
 import com.expensetracker.ui.Prefill
+import com.expensetracker.ui.appLocale
 import com.expensetracker.ui.charts.CashFlowChart
 import com.expensetracker.ui.charts.ChartLegend
 import com.expensetracker.ui.charts.LineChart
@@ -61,6 +66,8 @@ import com.expensetracker.ui.components.RoundedProgressBar
 import com.expensetracker.ui.components.SectionCard
 import com.expensetracker.ui.components.animatedAmount
 import com.expensetracker.ui.components.color
+import com.expensetracker.ui.dateFormatter
+import com.expensetracker.ui.shortDateText
 import com.expensetracker.ui.theme.CashInDark
 import com.expensetracker.ui.theme.CashInLight
 import com.expensetracker.ui.theme.CashInText
@@ -69,13 +76,12 @@ import com.expensetracker.ui.theme.CashOutLight
 import com.expensetracker.ui.theme.Decrease
 import com.expensetracker.ui.theme.Increase
 import com.expensetracker.ui.theme.LocalDarkTheme
+import com.expensetracker.ui.title
+import com.expensetracker.ui.word
 import com.expensetracker.util.formatCompact
 import com.expensetracker.util.formatMoney
-import com.expensetracker.util.shortDate
 import java.time.LocalDate
-import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -104,7 +110,7 @@ fun LazyListScope.cashFlowItems(
 ) {
     val summary = state.cashFlow ?: return
     val currency = state.currency
-    val periodWord = state.type.label.lowercase()
+
 
     // Bank statements first: they're the reference the cash flow should agree with.
     if (state.statements.isNotEmpty()) {
@@ -116,20 +122,20 @@ fun LazyListScope.cashFlowItems(
             SectionCard {
                 EmptyState(
                     icon = Icons.Rounded.Insights,
-                    title = "Add your income to see cash flow",
-                    message = "Record your salary and other money coming in (or import it from a bank statement) to see how much you keep, what's safe to spend, and which bills come back every month.",
+                    title = stringResource(R.string.cf_add_income_title),
+                    message = stringResource(R.string.cf_add_income_message),
                     action = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Button(onClick = onAddIncome) {
                                 Icon(Icons.Rounded.Add, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Add income")
+                                Text(stringResource(R.string.add_income))
                             }
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(onClick = onImport) {
                                 Icon(Icons.Rounded.UploadFile, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Import bank statement")
+                                Text(stringResource(R.string.import_bank_statement))
                             }
                         }
                     },
@@ -144,10 +150,10 @@ fun LazyListScope.cashFlowItems(
 
     item {
         SectionCard(
-            title = "Cash in vs cash out",
-            subtitle = if (state.type == PeriodType.YEAR) "Per month · tap a column" else "Per day · tap a column",
+            title = stringResource(R.string.cash_in_vs_out),
+            subtitle = stringResource(if (state.type == PeriodType.YEAR) R.string.per_month_tap else R.string.per_day_tap),
         ) {
-            ChartLegend(listOf("Cash in" to cashInColor, "Cash out" to cashOutColor))
+            ChartLegend(listOf(stringResource(R.string.cash_in) to cashInColor, stringResource(R.string.cash_out) to cashOutColor))
             Spacer(Modifier.height(12.dp))
             CashFlowChart(
                 points = summary.series,
@@ -155,32 +161,25 @@ fun LazyListScope.cashFlowItems(
                 outColor = cashOutColor,
                 valueFormatter = { formatMoney(it, currency) },
                 axisFormatter = { formatCompact(it, currency) },
-                tooltipLabel = { index ->
-                    when (state.type) {
-                        PeriodType.YEAR -> summary.period.start.plusMonths(index.toLong()).month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-                        else -> shortDate(summary.period.start.plusDays(index.toLong()))
-                    }
-                },
+                tooltipLabel = seriesLabeler(state.type, summary.period.start),
             )
         }
     }
 
     if (summary.runningNet.size > 1) {
         item {
+            val slotLabel = seriesLabeler(state.type, summary.period.start)
+            val byEnd = stringResource(R.string.by_end_of)
+            val byDate = stringResource(R.string.by_date)
             SectionCard(
-                title = "Running net",
-                subtitle = "How far ahead (above 0) or behind you are as the $periodWord goes on",
+                title = stringResource(R.string.running_net),
+                subtitle = stringResource(R.string.running_net_subtitle, state.type.word()),
             ) {
                 LineChart(
                     points = summary.runningNet,
                     valueFormatter = { signed(it, currency) },
                     axisFormatter = { formatCompact(it, currency) },
-                    tooltipLabel = { index ->
-                        when (state.type) {
-                            PeriodType.YEAR -> "By end of " + summary.period.start.plusMonths(index.toLong()).month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-                            else -> "By " + shortDate(summary.period.start.plusDays(index.toLong()))
-                        }
-                    },
+                    tooltipLabel = { index -> (if (state.type == PeriodType.YEAR) byEnd else byDate).format(slotLabel(index)) },
                 )
             }
         }
@@ -192,7 +191,7 @@ fun LazyListScope.cashFlowItems(
 
     if (summary.incomeBySource.isNotEmpty()) {
         item {
-            SectionCard(title = "Where your money comes from", subtitle = "Income this $periodWord") {
+            SectionCard(title = stringResource(R.string.money_comes_from), subtitle = stringResource(R.string.income_this_period, state.type.word())) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     summary.incomeBySource.forEach { source ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -200,7 +199,7 @@ fun LazyListScope.cashFlowItems(
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Row {
-                                    Text(source.category.label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                                    Text(source.category.title(), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                                     Text(formatMoney(source.total, currency), style = MaterialTheme.typography.titleSmall)
                                 }
                                 Spacer(Modifier.height(6.dp))
@@ -219,12 +218,12 @@ fun LazyListScope.cashFlowItems(
 
     item {
         val subtitle = when {
-            summary.completedMonthsWithData == 0 -> "Monthly totals"
-            summary.monthsOverspent == 0 -> "You stayed within your income in every completed month"
-            else -> "Spent more than came in during ${summary.monthsOverspent} of ${summary.completedMonthsWithData} completed months"
+            summary.completedMonthsWithData == 0 -> stringResource(R.string.monthly_totals)
+            summary.monthsOverspent == 0 -> stringResource(R.string.within_income_all)
+            else -> stringResource(R.string.overspent_months, summary.monthsOverspent, summary.completedMonthsWithData)
         }
-        SectionCard(title = "Last 6 months", subtitle = subtitle) {
-            ChartLegend(listOf("Cash in" to cashInColor, "Cash out" to cashOutColor))
+        SectionCard(title = stringResource(R.string.last_6_months), subtitle = subtitle) {
+            ChartLegend(listOf(stringResource(R.string.cash_in) to cashInColor, stringResource(R.string.cash_out) to cashOutColor))
             Spacer(Modifier.height(12.dp))
             CashFlowChart(
                 points = summary.monthly,
@@ -242,19 +241,19 @@ private fun CashSummaryCard(summary: CashFlowSummary, state: AnalyticsUiState) {
     val currency = state.currency
     SectionCard {
         Row(Modifier.fillMaxWidth()) {
-            Figure("Cash in", "+" + formatMoney(animatedAmount(summary.cashIn), currency), cashInColor, Modifier.weight(1f))
-            Figure("Cash out", "−" + formatMoney(animatedAmount(summary.cashOut), currency), cashOutColor, Modifier.weight(1f))
+            Figure(stringResource(R.string.cash_in), "+" + formatMoney(animatedAmount(summary.cashIn), currency), cashInColor, Modifier.weight(1f))
+            Figure(stringResource(R.string.cash_out), "−" + formatMoney(animatedAmount(summary.cashOut), currency), cashOutColor, Modifier.weight(1f))
         }
         if (summary.cashIn == 0.0) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "No money in recorded for this ${state.type.label.lowercase()}. Use ‹ to see earlier periods, or add income.",
+                stringResource(R.string.no_money_in_period, state.type.word()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.height(18.dp))
-        Text(if (summary.net >= 0) "Left over" else "Short by", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(if (summary.net >= 0) R.string.left_over else R.string.short_by), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             formatMoney(abs(animatedAmount(summary.net)), currency),
             style = MaterialTheme.typography.displaySmall,
@@ -262,14 +261,14 @@ private fun CashSummaryCard(summary: CashFlowSummary, state: AnalyticsUiState) {
         )
         summary.savingsRate?.let { rate ->
             Spacer(Modifier.height(8.dp))
-            val rateText = if (rate >= 0) "You kept ${percent(rate)} of what came in" else "You spent ${percent(-rate)} more than came in"
+            val rateText = if (rate >= 0) stringResource(R.string.kept_rate, percent(rate)) else stringResource(R.string.overspent_rate, percent(-rate))
             Text(rateText, style = MaterialTheme.typography.bodyMedium)
             summary.previousSavingsRate?.let { prev ->
                 val delta = ((rate - prev) * 100).roundToInt()
                 val text = when {
-                    delta > 0 -> "Up $delta points from the ${state.comparedTo} (${percent(prev)})"
-                    delta < 0 -> "Down ${-delta} points from the ${state.comparedTo} (${percent(prev)})"
-                    else -> "Same as the ${state.comparedTo}"
+                    delta > 0 -> stringResource(R.string.rate_up, delta, state.comparedToText(), percent(prev))
+                    delta < 0 -> stringResource(R.string.rate_down, -delta, state.comparedToText(), percent(prev))
+                    else -> stringResource(R.string.rate_same, state.comparedToText())
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     if (delta != 0) {
@@ -305,41 +304,43 @@ private fun Figure(label: String, value: String, swatch: Color, modifier: Modifi
 private fun SmartInsightsCard(summary: CashFlowSummary, state: AnalyticsUiState) {
     val currency = state.currency
     val outlook = summary.outlook
-    SectionCard(title = "Smart insights") {
+    SectionCard(title = stringResource(R.string.smart_insights)) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (outlook != null) {
-                val pending = buildList {
-                    if (outlook.expectedIncome > 0) add("${formatMoney(outlook.expectedIncome, currency)} income still expected")
-                    if (outlook.expectedBills > 0) add("${formatMoney(outlook.expectedBills, currency)} in bills still due")
-                }.joinToString(" and ")
-                val days = "${outlook.remainingDays} ${if (outlook.remainingDays == 1) "day" else "days"}"
+                val parts = buildList {
+                    if (outlook.expectedIncome > 0) add(stringResource(R.string.expected_income_pending, formatMoney(outlook.expectedIncome, currency)))
+                    if (outlook.expectedBills > 0) add(stringResource(R.string.bills_pending, formatMoney(outlook.expectedBills, currency)))
+                }
+                val both = stringResource(R.string.pending_both, parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" })
+                val pending = if (parts.size == 2) both else parts.firstOrNull().orEmpty()
+                val days = pluralStringResource(R.plurals.days_count, outlook.remainingDays, outlook.remainingDays)
                 if (outlook.safeToSpendPerDay >= 0) {
                     InsightRow(
                         Icons.Rounded.Savings, Decrease,
-                        "Safe to spend: ${formatMoney(outlook.safeToSpendPerDay, currency)} a day",
-                        "For the next $days to end the month even" + if (pending.isNotEmpty()) ", counting $pending." else ".",
+                        stringResource(R.string.safe_to_spend_day, formatMoney(outlook.safeToSpendPerDay, currency)),
+                        if (pending.isNotEmpty()) stringResource(R.string.safe_detail_pending, days, pending) else stringResource(R.string.safe_detail, days),
                     )
                 } else {
                     InsightRow(
                         Icons.Rounded.WarningAmber, Increase,
-                        "Short by ${formatMoney(-outlook.safeToSpendPerDay * outlook.remainingDays, currency)} this month",
-                        "More has gone out than will come in" + (if (pending.isNotEmpty()) ", even with $pending" else "") + ". Keep spending low for the next $days.",
+                        stringResource(R.string.short_month, formatMoney(-outlook.safeToSpendPerDay * outlook.remainingDays, currency)),
+                        if (pending.isNotEmpty()) stringResource(R.string.short_detail_pending, days, pending) else stringResource(R.string.short_detail, days),
                     )
                 }
                 InsightRow(
                     Icons.Rounded.CalendarMonth, MaterialTheme.colorScheme.primary,
-                    "By ${shortDate(summary.period.end)}: ${signed(outlook.projectedNet, currency)} expected",
-                    "About ${formatMoney(outlook.projectedIn, currency)} in and ${formatMoney(outlook.projectedOut, currency)} out at your current pace.",
+                    stringResource(R.string.projected, shortDateText(summary.period.end), signed(outlook.projectedNet, currency)),
+                    stringResource(R.string.projected_detail, formatMoney(outlook.projectedIn, currency), formatMoney(outlook.projectedOut, currency)),
                 )
             }
             if (summary.completedMonthsWithData >= 2) {
                 if (summary.monthsOverspent == 0) {
-                    InsightRow(Icons.AutoMirrored.Rounded.TrendingUp, Decrease, "Within your income every month", "None of the last ${summary.completedMonthsWithData} completed months spent more than came in.")
+                    InsightRow(Icons.AutoMirrored.Rounded.TrendingUp, Decrease, stringResource(R.string.within_every_month), stringResource(R.string.within_every_month_detail, summary.completedMonthsWithData))
                 } else {
                     InsightRow(
                         Icons.AutoMirrored.Rounded.TrendingDown, Increase,
-                        "Overspent in ${summary.monthsOverspent} of the last ${summary.completedMonthsWithData} months",
-                        "Those months spent more than came in. Check them in the 6-month chart below.",
+                        stringResource(R.string.overspent_in, summary.monthsOverspent, summary.completedMonthsWithData),
+                        stringResource(R.string.overspent_in_detail),
                     )
                 }
             }
@@ -347,15 +348,15 @@ private fun SmartInsightsCard(summary: CashFlowSummary, state: AnalyticsUiState)
             if (summary.recurringBillsPerMonth > 0 && income != null && income > 0) {
                 InsightRow(
                     Icons.Rounded.EventRepeat, MaterialTheme.colorScheme.tertiary,
-                    "Regular bills take ${percent(summary.recurringBillsPerMonth / income)} of your income",
-                    "${formatMoney(summary.recurringBillsPerMonth, currency)} a month across ${summary.recurringBills.size} recurring ${if (summary.recurringBills.size == 1) "payment" else "payments"}.",
+                    stringResource(R.string.bills_share, percent(summary.recurringBillsPerMonth / income)),
+                    pluralStringResource(R.plurals.bills_share_detail, summary.recurringBills.size, formatMoney(summary.recurringBillsPerMonth, currency), summary.recurringBills.size),
                 )
             }
             summary.incomeBySource.firstOrNull()?.takeIf { summary.incomeBySource.size > 1 }?.let { top ->
                 InsightRow(
                     Icons.Rounded.Insights, MaterialTheme.colorScheme.secondary,
-                    "${top.category.label} brings in ${percent(top.share.toDouble())} of your income",
-                    "The rest comes from ${summary.incomeBySource.size - 1} other ${if (summary.incomeBySource.size == 2) "source" else "sources"} this ${state.type.label.lowercase()}.",
+                    stringResource(R.string.top_source, top.category.title(), percent(top.share.toDouble())),
+                    pluralStringResource(R.plurals.other_sources, summary.incomeBySource.size - 1, summary.incomeBySource.size - 1, state.type.word()),
                 )
             }
         }
@@ -365,10 +366,10 @@ private fun SmartInsightsCard(summary: CashFlowSummary, state: AnalyticsUiState)
 @Composable
 private fun RecurringCard(summary: CashFlowSummary, today: LocalDate, currency: AppCurrency, onLog: (Prefill) -> Unit) {
     val items = (summary.recurringIncome + summary.recurringBills).sortedBy { it.nextDate }
-    SectionCard(title = "Regular income & bills", subtitle = "Spotted from the last 4 months · tap one to log it") {
+    SectionCard(title = stringResource(R.string.regular_title), subtitle = stringResource(R.string.regular_subtitle)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items.forEach { item ->
-                RecurringRow(item, today, currency) { onLog(Prefill(item.typicalAmount, item.category, item.name)) }
+                RecurringRow(item, today, currency) { onLog(Prefill(item.typicalAmount, item.category, item.name.takeIf { it != item.category.label }.orEmpty())) }
             }
         }
     }
@@ -378,12 +379,16 @@ private fun RecurringCard(summary: CashFlowSummary, today: LocalDate, currency: 
 private fun RecurringRow(item: RecurringItem, today: LocalDate, currency: AppCurrency, onLog: () -> Unit) {
     val income = item.type == EntryType.INCOME
     val days = ChronoUnit.DAYS.between(today, item.nextDate)
+    val next = shortDateText(item.nextDate)
     val whenText = when {
-        days <= 0L -> "Expected today"
-        days == 1L -> "Tomorrow"
-        days < 14 -> "In $days days · ${shortDate(item.nextDate)}"
-        else -> "Next on ${shortDate(item.nextDate)}"
+        days <= 0L -> stringResource(R.string.expected_today)
+        days == 1L -> stringResource(R.string.tomorrow)
+        days < 14 -> stringResource(R.string.in_days, days.toInt(), next)
+        else -> stringResource(R.string.next_on, next)
     }
+    // A recurring item with no note is named after its category: show that in the app's language.
+    val name = if (item.name == item.category.label) item.category.title() else item.name
+    val dayText = if (AppLocale.isKhmer(appLocale())) item.dayOfMonth.toString() else ordinal(item.dayOfMonth)
     Row(
         Modifier
             .fillMaxWidth()
@@ -396,9 +401,9 @@ private fun RecurringRow(item: RecurringItem, today: LocalDate, currency: AppCur
         CategoryIcon(item.category, size = 40.dp, iconSize = 20.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(item.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "Around the ${ordinal(item.dayOfMonth)} · $whenText",
+                stringResource(R.string.around_day, dayText, whenText),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -412,7 +417,7 @@ private fun RecurringRow(item: RecurringItem, today: LocalDate, currency: AppCur
         )
         Icon(
             Icons.Rounded.AddCircleOutline,
-            contentDescription = "Log ${item.name} now",
+            contentDescription = stringResource(R.string.log_now, name),
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(start = 10.dp).size(20.dp),
         )
@@ -444,8 +449,8 @@ private fun StatementsCard(state: AnalyticsUiState, onRemoveSampleData: () -> Un
     val currency = state.currency
     val balance = state.bankBalance
     SectionCard(
-        title = if (state.statements.size == 1) "Bank statement" else "Bank statements",
-        subtitle = balance?.let { "Bank balance ${formatMoney(it.closingBalance ?: 0.0, currency)} on ${shortDate(it.periodEnd)}, ${it.periodEnd.year}" },
+        title = pluralStringResource(R.plurals.statements_title, state.statements.size),
+        subtitle = balance?.let { stringResource(R.string.bank_balance_on, formatMoney(it.closingBalance ?: 0.0, currency), dateFormatter(R.string.pattern_date_year).format(it.periodEnd)) },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
             state.statements.forEach { StatementBlock(it, currency, onRemoveSampleData) }
@@ -471,7 +476,8 @@ private fun StatementBlock(status: StatementStatus, currency: AppCurrency, onRem
             Column(Modifier.weight(1f)) {
                 Text(st.fileName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${shortDate(st.periodStart)} – ${shortDate(st.periodEnd)}, ${st.periodEnd.year} · ${st.transactionCount} transactions",
+                    "${shortDateText(st.periodStart)} – ${dateFormatter(R.string.pattern_date_year).format(st.periodEnd)} · " +
+                        pluralStringResource(R.plurals.transactions_count, st.transactionCount, st.transactionCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -479,11 +485,11 @@ private fun StatementBlock(status: StatementStatus, currency: AppCurrency, onRem
             MatchBadge(status.matches)
         }
         Spacer(Modifier.height(12.dp))
-        StatementLine("On the statement", "+" + formatMoney(st.totalIn, currency), "−" + formatMoney(st.totalOut, currency))
-        StatementLine("In your cash flow", "+" + formatMoney(status.appIn, currency), "−" + formatMoney(status.appOut, currency))
+        StatementLine(stringResource(R.string.on_statement), "+" + formatMoney(st.totalIn, currency), "−" + formatMoney(st.totalOut, currency))
+        StatementLine(stringResource(R.string.in_cash_flow), "+" + formatMoney(status.appIn, currency), "−" + formatMoney(status.appOut, currency))
         if (st.openingBalance != null && st.closingBalance != null) {
             Row(Modifier.padding(top = 6.dp)) {
-                Text("Balance", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(120.dp))
+                Text(stringResource(R.string.balance), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(120.dp))
                 Text(
                     "${formatMoney(st.openingBalance, currency)} → ${formatMoney(st.closingBalance, currency)}",
                     style = MaterialTheme.typography.bodySmall,
@@ -494,11 +500,11 @@ private fun StatementBlock(status: StatementStatus, currency: AppCurrency, onRem
         if (!status.matches) {
             val reasons = buildList {
                 if (status.otherCount > 0) {
-                    val sample = if (status.sampleCount > 0) " (${status.sampleCount} are sample data)" else ""
-                    add("${status.otherCount} other ${if (status.otherCount == 1) "entry is" else "entries are"} in these dates$sample: " + moneyPair(status.otherIn, status.otherOut, currency) + ".")
+                    val sample = if (status.sampleCount > 0) " " + stringResource(R.string.sample_note, status.sampleCount) else ""
+                    add(pluralStringResource(R.plurals.other_entries, status.otherCount, status.otherCount, sample, moneyPair(status.otherIn, status.otherOut, currency)))
                 }
                 if (status.missingIn > 0.005 || status.missingOut > 0.005) {
-                    add("Not imported from the statement (unticked or deleted): " + moneyPair(status.missingIn, status.missingOut, currency) + ".")
+                    add(stringResource(R.string.not_imported, moneyPair(status.missingIn, status.missingOut, currency)))
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -510,20 +516,25 @@ private fun StatementBlock(status: StatementStatus, currency: AppCurrency, onRem
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("Why it's different", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.why_different), style = MaterialTheme.typography.labelLarge)
                 reasons.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (status.sampleCount > 0) {
-                    TextButton(onClick = onRemoveSampleData, contentPadding = PaddingValues(0.dp)) { Text("Remove sample data") }
+                    TextButton(onClick = onRemoveSampleData, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.remove_sample)) }
                 }
             }
         }
     }
 }
 
-private fun moneyPair(inValue: Double, outValue: Double, currency: AppCurrency) = buildList {
-    if (inValue > 0.005) add("+" + formatMoney(inValue, currency) + " in")
-    if (outValue > 0.005) add("−" + formatMoney(outValue, currency) + " out")
-}.joinToString(", ").ifEmpty { formatMoney(0.0, currency) }
+@Composable
+private fun moneyPair(inValue: Double, outValue: Double, currency: AppCurrency): String {
+    val inText = stringResource(R.string.history_in, formatMoney(inValue, currency))
+    val outText = stringResource(R.string.history_out, formatMoney(outValue, currency))
+    return buildList {
+        if (inValue > 0.005) add(inText)
+        if (outValue > 0.005) add(outText)
+    }.joinToString(", ").ifEmpty { formatMoney(0.0, currency) }
+}
 
 @Composable
 private fun StatementLine(label: String, inText: String, outText: String) {
@@ -546,6 +557,6 @@ internal fun MatchBadge(matches: Boolean) {
     ) {
         Icon(if (matches) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(4.dp))
-        Text(if (matches) "Matches" else "Differs", style = MaterialTheme.typography.labelMedium, color = tint)
+        Text(stringResource(if (matches) R.string.matches else R.string.differs), style = MaterialTheme.typography.labelMedium, color = tint)
     }
 }

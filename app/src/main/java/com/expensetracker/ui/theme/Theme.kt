@@ -16,6 +16,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,7 @@ fun ExpenseTrackerTheme(
     CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = AppTypography,
+            typography = if (LocalConfiguration.current.locales[0].language == "km") KhmerTypography else AppTypography,
             shapes = AppShapes,
             content = content,
         )

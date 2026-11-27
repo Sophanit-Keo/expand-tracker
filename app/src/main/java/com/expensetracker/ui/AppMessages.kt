@@ -6,8 +6,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 /** A short confirmation shown at the bottom of the app, optionally with an action such as Undo. */
 data class AppMessage(
-    val text: String,
-    val actionLabel: String? = null,
+    val text: UiText,
+    val actionLabel: UiText? = null,
     val action: (suspend () -> Unit)? = null,
 )
 

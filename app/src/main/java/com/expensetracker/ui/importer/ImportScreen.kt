@@ -75,6 +75,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -84,6 +86,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
@@ -94,14 +97,19 @@ import com.expensetracker.importer.DateParser
 import com.expensetracker.importer.Direction
 import com.expensetracker.importer.ParsedTransaction
 import com.expensetracker.importer.StatementKind
+import com.expensetracker.importer.TableMapper
 import com.expensetracker.ui.AppViewModelProvider
+import com.expensetracker.ui.asString
 import com.expensetracker.ui.components.SectionCard
 import com.expensetracker.ui.components.color
 import com.expensetracker.ui.components.icon
+import com.expensetracker.ui.dateFormatter
+import com.expensetracker.ui.shortDateText
+import com.expensetracker.ui.shortTitle
 import com.expensetracker.ui.theme.Decrease
 import com.expensetracker.ui.theme.card
+import com.expensetracker.ui.title
 import com.expensetracker.util.formatMoney
-import com.expensetracker.util.shortDate
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -132,7 +140,7 @@ fun ImportScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(if (state.step == ImportStep.MAP) "Match columns" else "Import statement")
+                        Text(stringResource(if (state.step == ImportStep.MAP) R.string.match_columns else R.string.import_statement))
                         if (state.fileName != null && state.step in setOf(ImportStep.MAP, ImportStep.REVIEW)) {
                             Text(
                                 state.fileName.orEmpty(),
@@ -145,14 +153,14 @@ fun ImportScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = "Close") }
+                    IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.close)) }
                 },
                 actions = {
                     if (state.step == ImportStep.REVIEW && state.kind != StatementKind.PDF) {
                         TextButton(onClick = viewModel::editColumns) {
                             Icon(Icons.Rounded.ViewColumn, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Columns")
+                            Text(stringResource(R.string.columns))
                         }
                     }
                 },
@@ -162,14 +170,14 @@ fun ImportScreen(
         bottomBar = {
             when (state.step) {
                 ImportStep.REVIEW -> BottomAction(
-                    text = if (state.selectedRows.isEmpty()) "Save statement (nothing new to import)"
-                    else "Import ${state.selectedRows.size} ${if (state.selectedRows.size == 1) "transaction" else "transactions"}",
+                    text = if (state.selectedRows.isEmpty()) stringResource(R.string.save_statement_nothing_new)
+                    else pluralStringResource(R.plurals.import_n, state.selectedRows.size, state.selectedRows.size),
                     enabled = state.rows.isNotEmpty(),
                     onClick = viewModel::import,
                     tag = "import_confirm",
                 )
                 ImportStep.MAP -> BottomAction(
-                    text = "Continue",
+                    text = stringResource(R.string.continue_action),
                     enabled = state.mappingPreview.isNotEmpty(),
                     onClick = viewModel::confirmMapping,
                     tag = "mapping_continue",
@@ -185,7 +193,7 @@ fun ImportScreen(
         ) {
             when (state.step) {
                 ImportStep.PICK -> PickStep(pickFile)
-                ImportStep.READING, ImportStep.IMPORTING -> Busy(if (state.step == ImportStep.READING) "Reading your statement…" else "Importing…")
+                ImportStep.READING, ImportStep.IMPORTING -> Busy(stringResource(if (state.step == ImportStep.READING) R.string.reading_statement else R.string.importing))
                 ImportStep.PASSWORD -> PasswordStep(state.wrongPassword, viewModel::submitPassword)
                 ImportStep.MAP -> MapStep(state, viewModel::updateMapping)
                 ImportStep.REVIEW -> ReviewStep(
@@ -197,7 +205,7 @@ fun ImportScreen(
                     onFlip = viewModel::flipDirection,
                 )
                 ImportStep.DONE -> DoneStep(state, onViewHistory, onViewCashFlow, onClose, viewModel::removeSampleData)
-                ImportStep.ERROR -> ErrorStep(state.errorMessage.orEmpty(), pickFile)
+                ImportStep.ERROR -> ErrorStep(state.errorMessage?.asString().orEmpty(), pickFile)
             }
         }
     }
@@ -250,10 +258,10 @@ private fun PickStep(onPick: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         IconBubble(Icons.Rounded.UploadFile, size = 96)
         Spacer(Modifier.height(20.dp))
-        Text("Import from your bank", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+        Text(stringResource(R.string.import_from_bank), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Download a statement from your bank's app or website, then choose the file here.",
+            stringResource(R.string.import_from_bank_message),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -266,14 +274,14 @@ private fun PickStep(onPick: () -> Unit) {
         Button(onClick = onPick, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("choose_file")) {
             Icon(Icons.Rounded.UploadFile, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Choose statement file", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.choose_statement_file), style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(24.dp))
-        SectionCard(title = "How it works") {
+        SectionCard(title = stringResource(R.string.how_it_works)) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                HowStep(1, "Choose your statement", "CSV and Excel files work best. PDFs work when they contain text (not a scan).")
-                HowStep(2, "Review", "Spending and money coming in are selected for you, each with a suggested category.")
-                HowStep(3, "Import", "Transactions you've already imported are skipped, so importing the same file twice is safe.")
+                HowStep(1, stringResource(R.string.how_1_title), stringResource(R.string.how_1))
+                HowStep(2, stringResource(R.string.how_2_title), stringResource(R.string.how_2))
+                HowStep(3, stringResource(R.string.how_3_title), stringResource(R.string.how_3))
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -281,7 +289,7 @@ private fun PickStep(onPick: () -> Unit) {
             Icon(Icons.Rounded.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                "Your file is read on this phone and never uploaded.",
+                stringResource(R.string.file_stays_local),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -357,10 +365,10 @@ private fun PasswordStep(wrong: Boolean, onSubmit: (String) -> Unit) {
         Spacer(Modifier.height(40.dp))
         IconBubble(Icons.Rounded.Lock)
         Spacer(Modifier.height(20.dp))
-        Text("This PDF is password-protected", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(stringResource(R.string.pdf_protected), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Banks often protect statements with a password, such as your date of birth or part of your account number. Check the email or app the statement came from.",
+            stringResource(R.string.pdf_protected_message),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -369,10 +377,10 @@ private fun PasswordStep(wrong: Boolean, onSubmit: (String) -> Unit) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("PDF password") },
+            label = { Text(stringResource(R.string.pdf_password)) },
             singleLine = true,
             isError = wrong,
-            supportingText = if (wrong) ({ Text("That password didn't work. Try again.") }) else null,
+            supportingText = if (wrong) ({ Text(stringResource(R.string.wrong_password)) }) else null,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { if (password.isNotEmpty()) onSubmit(password) }),
@@ -380,7 +388,7 @@ private fun PasswordStep(wrong: Boolean, onSubmit: (String) -> Unit) {
         )
         Spacer(Modifier.height(16.dp))
         Button(onClick = { onSubmit(password) }, enabled = password.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text("Unlock")
+            Text(stringResource(R.string.unlock))
         }
     }
 }
@@ -396,11 +404,11 @@ private fun ErrorStep(message: String, onPick: () -> Unit) {
         Spacer(Modifier.height(40.dp))
         IconBubble(Icons.Rounded.ErrorOutline, tint = MaterialTheme.colorScheme.onErrorContainer, background = MaterialTheme.colorScheme.errorContainer)
         Spacer(Modifier.height(20.dp))
-        Text("Couldn't import this file", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(stringResource(R.string.import_failed), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onPick, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Choose another file") }
+        Button(onClick = onPick, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.choose_another)) }
     }
 }
 
@@ -424,18 +432,18 @@ private fun DoneStep(
         IconBubble(Icons.Rounded.CheckCircle, size = 88, tint = Color.White, background = Decrease)
         Spacer(Modifier.height(20.dp))
         Text(
-            if (state.importedCount == 0) "Statement saved"
-            else "Imported ${state.importedCount} ${if (state.importedCount == 1) "transaction" else "transactions"}",
+            if (state.importedCount == 0) stringResource(R.string.statement_saved)
+            else pluralStringResource(R.plurals.imported_n, state.importedCount, state.importedCount),
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            if (state.importedCount == 0) "Everything in this file was already in the app."
-            else buildList {
-                if (state.importedOut > 0) add("−${formatMoney(state.importedOut, state.currency)} spending")
-                if (state.importedIn > 0) add("+${formatMoney(state.importedIn, state.currency)} income")
-            }.joinToString(" and ") + " added.",
+            if (state.importedCount == 0) stringResource(R.string.all_already_in)
+            else stringResource(R.string.amounts_added, joinAnd(buildList {
+                if (state.importedOut > 0) add(stringResource(R.string.spending_amount, formatMoney(state.importedOut, state.currency)))
+                if (state.importedIn > 0) add(stringResource(R.string.income_amount, formatMoney(state.importedIn, state.currency)))
+            })),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -448,10 +456,10 @@ private fun DoneStep(
         Button(
             onClick = { onViewCashFlow(YearMonth.from(status?.statement?.periodEnd ?: LocalDate.now())) },
             modifier = Modifier.fillMaxWidth().height(52.dp).testTag("view_cash_flow"),
-        ) { Text("View cash flow") }
+        ) { Text(stringResource(R.string.view_cash_flow)) }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onViewHistory, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("View in History") }
-        TextButton(onClick = onClose, modifier = Modifier.padding(top = 4.dp)) { Text("Done") }
+        OutlinedButton(onClick = onViewHistory, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.view_in_history)) }
+        TextButton(onClick = onClose, modifier = Modifier.padding(top = 4.dp)) { Text(stringResource(R.string.done)) }
         Spacer(Modifier.height(16.dp))
     }
 }
@@ -461,32 +469,29 @@ private fun DoneStep(
 private fun CashFlowVsStatement(status: StatementStatus, currency: AppCurrency, onRemoveSampleData: () -> Unit) {
     val st = status.statement
     SectionCard(
-        title = "Cash flow vs statement",
-        subtitle = "${shortDate(st.periodStart)} – ${shortDate(st.periodEnd)}, ${st.periodEnd.year}",
-        action = { CheckBadge(if (status.matches) CheckState.OK else CheckState.PROBLEM, okText = "Matches", problemText = "Differs") },
+        title = stringResource(R.string.cf_vs_statement),
+        subtitle = dateRangeText(st.periodStart, st.periodEnd),
+        action = { CheckBadge(if (status.matches) CheckState.OK else CheckState.PROBLEM, okText = stringResource(R.string.matches), problemText = stringResource(R.string.differs)) },
     ) {
-        CheckLine("Statement", "+" + formatMoney(st.totalIn, currency), "−" + formatMoney(st.totalOut, currency))
-        CheckLine("Cash flow", "+" + formatMoney(status.appIn, currency), "−" + formatMoney(status.appOut, currency))
+        CheckLine(stringResource(R.string.statement), "+" + formatMoney(st.totalIn, currency), "−" + formatMoney(st.totalOut, currency))
+        CheckLine(stringResource(R.string.cash_flow), "+" + formatMoney(status.appIn, currency), "−" + formatMoney(status.appOut, currency))
         if (st.openingBalance != null && st.closingBalance != null) {
-            CheckLine("Bank balance", formatMoney(st.openingBalance, currency) + " →", formatMoney(st.closingBalance, currency))
+            CheckLine(stringResource(R.string.bank_balance), formatMoney(st.openingBalance, currency) + " →", formatMoney(st.closingBalance, currency))
         }
         if (!status.matches) {
             Spacer(Modifier.height(8.dp))
             if (status.otherCount > 0) {
-                Note(
-                    "${status.otherCount} other ${if (status.otherCount == 1) "entry falls" else "entries fall"} in these dates" +
-                        (if (status.sampleCount > 0) " (${status.sampleCount} are sample data)" else " (added by hand or imported before)") +
-                        ", so the cash flow includes them too.",
-                )
+                val why = if (status.sampleCount > 0) stringResource(R.string.sample_note, status.sampleCount) else stringResource(R.string.by_hand_note)
+                Note(pluralStringResource(R.plurals.other_entries_fall, status.otherCount, status.otherCount, " $why"))
             }
             if (status.missingIn > 0.005 || status.missingOut > 0.005) {
-                Note("Some statement rows weren't imported (left unticked as duplicates). Untick less, or add them by hand, to match.")
+                Note(stringResource(R.string.rows_not_imported))
             }
             if (status.sampleCount > 0) {
-                TextButton(onClick = onRemoveSampleData, contentPadding = PaddingValues(0.dp)) { Text("Remove sample data") }
+                TextButton(onClick = onRemoveSampleData, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.remove_sample)) }
             }
         } else {
-            Note("Your cash flow for these dates now equals the statement.")
+            Note(stringResource(R.string.cf_equals_statement))
         }
     }
 }
@@ -494,7 +499,7 @@ private fun CashFlowVsStatement(status: StatementStatus, currency: AppCurrency, 
 private enum class CheckState { OK, PROBLEM, NONE }
 
 @Composable
-private fun CheckBadge(state: CheckState, okText: String, problemText: String, noneText: String = "Nothing to check") {
+private fun CheckBadge(state: CheckState, okText: String, problemText: String, noneText: String = stringResource(R.string.nothing_to_check)) {
     val tint = when (state) {
         CheckState.OK -> Decrease
         CheckState.PROBLEM -> MaterialTheme.colorScheme.error
@@ -540,7 +545,7 @@ private fun CheckLine(label: String, first: String, second: String, ok: Boolean?
             if (ok != null) {
                 Icon(
                     if (ok) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
-                    contentDescription = if (ok) "Matches" else "Doesn't match",
+                    contentDescription = stringResource(if (ok) R.string.matches else R.string.doesnt_match),
                     tint = if (ok) Decrease else MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(18.dp),
                 )
@@ -570,45 +575,45 @@ private fun StatementCheckCard(check: ImportCheck, currency: AppCurrency) {
         else -> CheckState.NONE
     }
     SectionCard(
-        title = "Statement check",
-        subtitle = "${shortDate(check.periodStart)} – ${shortDate(check.periodEnd)}, ${check.periodEnd.year}",
-        action = { CheckBadge(state, okText = "Adds up", problemText = "Check rows") },
+        title = stringResource(R.string.statement_check),
+        subtitle = dateRangeText(check.periodStart, check.periodEnd),
+        action = { CheckBadge(state, okText = stringResource(R.string.adds_up), problemText = stringResource(R.string.check_rows)) },
         modifier = Modifier.testTag("statement_check"),
     ) {
         val s = check.summary
         CheckLine(
-            "Money in", "+" + formatMoney(check.foundIn, currency), "${check.countIn} ${if (check.countIn == 1) "row" else "rows"}",
+            stringResource(R.string.money_in), "+" + formatMoney(check.foundIn, currency), pluralStringResource(R.plurals.rows_count, check.countIn, check.countIn),
             ok = check.inMatches,
-            detail = s.printedIn?.takeIf { check.inMatches == false }?.let { "Statement total: +" + formatMoney(it, currency) },
+            detail = s.printedIn?.takeIf { check.inMatches == false }?.let { stringResource(R.string.statement_total_in, formatMoney(it, currency)) },
         )
         CheckLine(
-            "Money out", "−" + formatMoney(check.foundOut, currency), "${check.countOut} ${if (check.countOut == 1) "row" else "rows"}",
+            stringResource(R.string.money_out), "−" + formatMoney(check.foundOut, currency), pluralStringResource(R.plurals.rows_count, check.countOut, check.countOut),
             ok = check.outMatches,
-            detail = s.printedOut?.takeIf { check.outMatches == false }?.let { "Statement total: −" + formatMoney(it, currency) },
+            detail = s.printedOut?.takeIf { check.outMatches == false }?.let { stringResource(R.string.statement_total_out, formatMoney(it, currency)) },
         )
         if (s.openingBalance != null && s.closingBalance != null) {
             CheckLine(
-                "Balance", formatMoney(s.openingBalance, currency) + " →", formatMoney(s.closingBalance, currency),
+                stringResource(R.string.balance), formatMoney(s.openingBalance, currency) + " →", formatMoney(s.closingBalance, currency),
                 ok = check.balanceAddsUp,
-                detail = check.balanceDifference?.takeIf { check.balanceAddsUp == false }?.let { "Off by " + formatMoney(kotlin.math.abs(it), currency) },
+                detail = check.balanceDifference?.takeIf { check.balanceAddsUp == false }?.let { stringResource(R.string.off_by, formatMoney(kotlin.math.abs(it), currency)) },
             )
         }
         Spacer(Modifier.height(6.dp))
         when {
-            check.allMatch -> Note("Everything read from the file adds up to the statement's own totals and balances.")
-            !check.hasChecks -> Note("This file has no totals or balances to check against. Compare the money in and out above with your statement.")
+            check.allMatch -> Note(stringResource(R.string.check_all_match))
+            !check.hasChecks -> Note(stringResource(R.string.check_none))
         }
         if (s.fixedByBalance > 0) {
-            Note("${s.fixedByBalance} ${if (s.fixedByBalance == 1) "row was" else "rows were"} switched between in and out to follow the running balance.")
+            Note(pluralStringResource(R.plurals.fixed_by_balance, s.fixedByBalance, s.fixedByBalance))
         }
         if (s.balanceBreaks > 0) {
-            Note("${s.balanceBreaks} ${if (s.balanceBreaks == 1) "balance doesn't" else "balances don't"} follow from the amounts, so those rows may be misread.")
+            Note(pluralStringResource(R.plurals.balance_breaks, s.balanceBreaks, s.balanceBreaks))
         }
         if (check.unsure > 0) {
-            Note("${check.unsure} ${if (check.unsure == 1) "row isn't" else "rows aren't"} clearly money in or out. Tap ⇅ on a row to switch it.")
+            Note(pluralStringResource(R.plurals.unsure_rows, check.unsure, check.unsure))
         }
         if (check.hasProblem) {
-            Note("If a row is the wrong way round, tap ⇅ on it. The check updates as you go.")
+            Note(stringResource(R.string.check_flip_hint))
         }
     }
 }
@@ -618,8 +623,9 @@ private fun StatementCheckCard(check: ImportCheck, currency: AppCurrency) {
 @Composable
 private fun MapStep(state: ImportUiState, onChange: (ColumnMapping) -> Unit) {
     val mapping = state.mapping ?: return
-    val labels = state.columnLabels
-    val noneLabel = "None"
+    val columnFormat = stringResource(R.string.column_letter)
+    val labels = state.columnLabels.mapIndexed { i, label -> label.ifBlank { columnFormat.format(TableMapper.columnLetter(i)) } }
+    val noneLabel = stringResource(R.string.none)
     LazyColumn(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -634,25 +640,24 @@ private fun MapStep(state: ImportUiState, onChange: (ColumnMapping) -> Unit) {
                 Icon(Icons.Rounded.TableChart, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    if (state.mappingAutoDetected) "Check that each field points at the right column. The preview below updates as you change them."
-                    else "Some columns couldn't be recognised automatically. Choose which column holds each field.",
+                    stringResource(if (state.mappingAutoDetected) R.string.mapping_auto else R.string.mapping_manual),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
         }
         item {
-            SectionCard(title = "Columns") {
+            SectionCard(title = stringResource(R.string.columns)) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DropdownField("Date", labels.getOrElse(mapping.dateColumn) { noneLabel }, labels) {
+                    DropdownField(stringResource(R.string.date), labels.getOrElse(mapping.dateColumn) { noneLabel }, labels) {
                         onChange(mapping.copy(dateColumn = it, dateFormat = DateParser.detectFormat(columnValues(state, mapping.headerRow, it)) ?: mapping.dateFormat))
                     }
-                    DropdownField("Description", labels.getOrElse(mapping.descriptionColumn) { noneLabel }, listOf(noneLabel) + labels) {
+                    DropdownField(stringResource(R.string.description), labels.getOrElse(mapping.descriptionColumn) { noneLabel }, listOf(noneLabel) + labels) {
                         onChange(mapping.copy(descriptionColumn = it - 1))
                     }
-                    Text("Amounts", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.amounts), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                        listOf(AmountMode.SINGLE to "One column", AmountMode.DEBIT_CREDIT to "Debit & credit").forEachIndexed { i, (mode, label) ->
+                        listOf(AmountMode.SINGLE to stringResource(R.string.one_column), AmountMode.DEBIT_CREDIT to stringResource(R.string.debit_credit)).forEachIndexed { i, (mode, label) ->
                             SegmentedButton(
                                 selected = mapping.amountMode == mode,
                                 onClick = {
@@ -671,12 +676,12 @@ private fun MapStep(state: ImportUiState, onChange: (ColumnMapping) -> Unit) {
                         }
                     }
                     if (mapping.amountMode == AmountMode.SINGLE) {
-                        DropdownField("Amount", labels.getOrElse(mapping.amountColumn) { noneLabel }, labels) { onChange(mapping.copy(amountColumn = it)) }
+                        DropdownField(stringResource(R.string.amount), labels.getOrElse(mapping.amountColumn) { noneLabel }, labels) { onChange(mapping.copy(amountColumn = it)) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Spending is shown as positive", style = MaterialTheme.typography.titleSmall)
+                                Text(stringResource(R.string.spending_positive), style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    "Turn on if purchases aren't negative numbers (common on credit card statements).",
+                                    stringResource(R.string.spending_positive_hint),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -685,11 +690,11 @@ private fun MapStep(state: ImportUiState, onChange: (ColumnMapping) -> Unit) {
                             Switch(checked = mapping.expensesArePositive, onCheckedChange = { onChange(mapping.copy(expensesArePositive = it)) })
                         }
                     } else {
-                        DropdownField("Money out (debit)", labels.getOrElse(mapping.debitColumn) { noneLabel }, labels) { onChange(mapping.copy(debitColumn = it)) }
-                        DropdownField("Money in (credit)", labels.getOrElse(mapping.creditColumn) { noneLabel }, labels) { onChange(mapping.copy(creditColumn = it)) }
+                        DropdownField(stringResource(R.string.money_out_debit), labels.getOrElse(mapping.debitColumn) { noneLabel }, labels) { onChange(mapping.copy(debitColumn = it)) }
+                        DropdownField(stringResource(R.string.money_in_credit), labels.getOrElse(mapping.creditColumn) { noneLabel }, labels) { onChange(mapping.copy(creditColumn = it)) }
                     }
                     DropdownField(
-                        "Date format",
+                        stringResource(R.string.date_format),
                         DateParser.example(mapping.dateFormat),
                         DateParser.supportedFormats.map { "${it.example}   (${it.id})" },
                     ) { onChange(mapping.copy(dateFormat = DateParser.supportedFormats[it].id)) }
@@ -697,10 +702,10 @@ private fun MapStep(state: ImportUiState, onChange: (ColumnMapping) -> Unit) {
             }
         }
         item {
-            SectionCard(title = "Preview", subtitle = "First rows read with these settings") {
+            SectionCard(title = stringResource(R.string.preview), subtitle = stringResource(R.string.preview_hint)) {
                 if (state.mappingPreview.isEmpty()) {
                     Text(
-                        "No transactions could be read. Check the date column and date format.",
+                        stringResource(R.string.preview_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -720,7 +725,7 @@ private fun columnValues(state: ImportUiState, headerRow: Int, column: Int) =
 @Composable
 private fun PreviewRow(tx: ParsedTransaction, currency: AppCurrency) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(shortDate(tx.date), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(56.dp))
+        Text(shortDateText(tx.date), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(56.dp))
         Text(tx.description.ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
         AmountText(tx.amount, tx.direction, currency)
@@ -791,14 +796,14 @@ private fun ReviewStep(
                     FilterChip(
                         selected = state.moneyInSelected,
                         onClick = { onMoneyInSelected(!state.moneyInSelected) },
-                        label = { Text("Include money in (${state.moneyInCount})") },
+                        label = { Text(stringResource(R.string.include_money_in, state.moneyInCount)) },
                         modifier = Modifier.testTag("include_money_in"),
                         shape = CircleShape,
                     )
                 }
                 Spacer(Modifier.weight(1f))
                 val allSelected = visible.filter { it.flag != RowFlag.ALREADY_IMPORTED }.all { it.selected }
-                TextButton(onClick = { onSelectAll(!allSelected) }) { Text(if (allSelected) "Select none" else "Select all") }
+                TextButton(onClick = { onSelectAll(!allSelected) }) { Text(stringResource(if (allSelected) R.string.select_none else R.string.select_all)) }
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -834,10 +839,10 @@ private fun SummaryCard(state: ImportUiState) {
             IconBubble(Icons.AutoMirrored.Rounded.ReceiptLong, size = 44)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("${state.rows.size} transactions found", style = MaterialTheme.typography.titleMedium)
+                Text(pluralStringResource(R.plurals.transactions_found, state.rows.size, state.rows.size), style = MaterialTheme.typography.titleMedium)
                 if (dates.isNotEmpty()) {
                     Text(
-                        "${shortDate(dates.min())} – ${shortDate(dates.max())}, ${dates.max().year} · ${state.kind?.label.orEmpty()}",
+                        "${dateRangeText(dates.min(), dates.max())} · ${state.kind?.label.orEmpty()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -847,22 +852,25 @@ private fun SummaryCard(state: ImportUiState) {
         val notes = buildList {
             if (state.selectedOut > 0 || state.selectedIn > 0) {
                 add(
-                    "Selected: " + buildList {
-                        if (state.selectedOut > 0) add("−${formatMoney(state.selectedOut, state.currency)} spending")
-                        if (state.selectedIn > 0) add("+${formatMoney(state.selectedIn, state.currency)} income")
-                    }.joinToString(", ") + ".",
+                    stringResource(
+                        R.string.selected_summary,
+                        buildList {
+                            if (state.selectedOut > 0) add(stringResource(R.string.spending_amount, formatMoney(state.selectedOut, state.currency)))
+                            if (state.selectedIn > 0) add(stringResource(R.string.income_amount, formatMoney(state.selectedIn, state.currency)))
+                        }.joinToString(", "),
+                    ),
                 )
             }
             state.moneyInCount.takeIf { it > 0 }?.let { n ->
-                add(if (n == 1) "1 money-in transaction (salary, transfer in…) will be added as income for your cash flow." else "$n money-in transactions (salary, transfers in…) will be added as income for your cash flow.")
+                add(pluralStringResource(R.plurals.money_in_note, n, n))
             }
             state.skippedDuplicates.takeIf { it > 0 }?.let { n ->
-                add(if (n == 1) "1 looks like a duplicate and is unticked." else "$n look like duplicates and are unticked.")
+                add(pluralStringResource(R.plurals.duplicates_note, n, n))
             }
             state.uncertainCount.takeIf { it > 0 }?.let { n ->
-                add(if (n == 1) "1 couldn't be marked as money in or out for sure; check it before importing." else "$n couldn't be marked as money in or out for sure; check them before importing.")
+                add(pluralStringResource(R.plurals.uncertain_note, n, n))
             }
-            add("Tap a category to change it. The app remembers your choice for that merchant.")
+            add(stringResource(R.string.tap_category_note))
         }
         Spacer(Modifier.height(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -901,13 +909,13 @@ private fun ReviewRow(row: ImportRow, currency: AppCurrency, shape: Shape, onTog
             )
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(shortDate(row.date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(shortDateText(row.date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(8.dp))
                 CategoryPill(row.category, onPickCategory)
             }
             row.flag?.let { flag ->
                 Text(
-                    flag.label,
+                    stringResource(flag.label),
                     style = MaterialTheme.typography.labelSmall,
                     color = when (flag) {
                         RowFlag.MONEY_IN -> Decrease
@@ -923,7 +931,7 @@ private fun ReviewRow(row: ImportRow, currency: AppCurrency, shape: Shape, onTog
         IconButton(onClick = onFlip, enabled = !disabled, modifier = Modifier.size(40.dp).testTag("flip_${row.id}")) {
             Icon(
                 Icons.Rounded.SwapVert,
-                contentDescription = "Switch between money in and money out",
+                contentDescription = stringResource(R.string.switch_direction),
                 tint = if (row.flag == RowFlag.CHECK_DIRECTION) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
             )
@@ -943,8 +951,8 @@ private fun CategoryPill(category: Category, onClick: () -> Unit) {
     ) {
         Icon(category.icon, contentDescription = null, tint = category.color, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(4.dp))
-        Text(category.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-        Icon(Icons.Rounded.ArrowDropDown, contentDescription = "Change category", modifier = Modifier.size(16.dp))
+        Text(category.title(), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        Icon(Icons.Rounded.ArrowDropDown, contentDescription = stringResource(R.string.change_category), modifier = Modifier.size(16.dp))
     }
 }
 
@@ -953,10 +961,10 @@ private fun CategoryPill(category: Category, onClick: () -> Unit) {
 private fun CategorySheet(categories: List<Category>, description: String, selected: Category, similar: Int, onSelect: (Category) -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
-            Text("Category for “$description”", style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(R.string.category_for, description), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                if (similar > 0) "Also applies to $similar similar ${if (similar == 1) "transaction" else "transactions"} and to future imports."
-                else "Remembered for this merchant in future imports.",
+                if (similar > 0) pluralStringResource(R.plurals.applies_similar, similar, similar)
+                else stringResource(R.string.remembered_merchant),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -985,7 +993,7 @@ private fun CategorySheet(categories: List<Category>, description: String, selec
                                     Icon(category.icon, contentDescription = null, tint = if (isSelected) Color.White else category.color, modifier = Modifier.size(20.dp))
                                 }
                                 Spacer(Modifier.height(6.dp))
-                                Text(category.label.substringBefore(" &"), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(category.shortTitle(), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                         repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
@@ -994,4 +1002,16 @@ private fun CategorySheet(categories: List<Category>, description: String, selec
             }
         }
     }
+}
+
+/** "Nov 1 – Nov 30, 2026" in the app's language. */
+@Composable
+private fun dateRangeText(start: LocalDate, end: LocalDate): String =
+    "${shortDateText(start)} – ${dateFormatter(R.string.pattern_date_year).format(end)}"
+
+/** "a and b", or just "a". */
+@Composable
+private fun joinAnd(parts: List<String>): String {
+    val both = stringResource(R.string.pending_both, parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" })
+    return if (parts.size >= 2) both else parts.firstOrNull().orEmpty()
 }
