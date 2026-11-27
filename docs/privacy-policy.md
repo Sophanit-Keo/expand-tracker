@@ -1,12 +1,12 @@
 # Privacy Policy — Expense Tracker
 
-_Last updated: 26 November 2026_
+_Last updated: 27 November 2026_
 
 Expense Tracker ("the app") is a personal budgeting app. This policy explains what happens to your information when you use it.
 
 ## The short version
 
-**Your data stays on your phone.** The app has no account, no servers, no ads and no analytics. It doesn't have permission to use the internet, so it can't send your information anywhere.
+**Your data stays on your phone.** The app has no account, no servers of its own, no ads and no analytics. It uses the internet for one thing only: downloading today's exchange rates when you use more than one currency, which you can turn off. Your entries are never sent anywhere.
 
 ## What the app stores, and where
 
@@ -14,11 +14,17 @@ Everything you enter or import is saved only in the app's private storage on you
 
 - expenses and income: amount, category, date and note
 - bank statements you import: the transactions you choose to keep, plus each statement's dates, totals and opening/closing balances
-- your settings: currency, monthly budget, theme, and the categories you picked for merchants
+- your settings: main currency, exchange rates, monthly budget, theme, language, and the categories you picked for merchants
 
 ## Bank statement files
 
 When you import a statement (CSV, Excel or PDF), the file is read on your device. The file itself isn't copied or kept. If the PDF is password-protected, the password is used only to open it and is never saved.
+
+## Exchange rates
+
+If you enter money in another currency and **Update rates automatically** is on (Settings → Exchange rates), the app downloads public exchange rates, at most twice a day when you open it, or when you add a currency or tap **Update now**. They come from ExchangeRate-API (open.er-api.com) or, if that isn't available, from the open-source currency-api served by jsDelivr (cdn.jsdelivr.net).
+
+The request contains only your main currency's code, for example "USD". No entries, amounts, notes or identifiers are sent. As with any website, these services can see your device's IP address when it connects; their own privacy policies apply. Turn the switch off to stop all downloads; you can still type rates yourself.
 
 ## Sharing
 

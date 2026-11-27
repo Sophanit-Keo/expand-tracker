@@ -22,9 +22,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -32,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -48,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -60,10 +64,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.ExpenseRepository
+import com.expensetracker.data.RateStatus
+import com.expensetracker.data.RatesUpdater
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.domain.Exchange
 import com.expensetracker.ui.AppViewModelProvider
 import com.expensetracker.ui.components.EmptyState
+import com.expensetracker.ui.dateFormatter
 import com.expensetracker.ui.theme.card
 import com.expensetracker.ui.title
 import com.expensetracker.util.sanitizeAmountInput
@@ -73,6 +80,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
 
 data class RatesUiState(
     val loading: Boolean = true,
@@ -83,27 +92,49 @@ data class RatesUiState(
     val usage: Map<AppCurrency, Int> = emptyMap(),
     /** A currency just added, waiting for its rate to be typed. */
     val pending: AppCurrency? = null,
+    val autoRates: Boolean = true,
+    val updatedAt: Long = 0,
+    val provider: String = "",
+    val providerUrl: String = "",
+    val onlineRates: Set<AppCurrency> = emptySet(),
+    val status: RateStatus = RateStatus.IDLE,
 )
 
 class ExchangeRatesViewModel(
     expenses: ExpenseRepository,
     private val settings: SettingsRepository,
+    private val updater: RatesUpdater,
 ) : ViewModel() {
     private val pending = MutableStateFlow<AppCurrency?>(null)
 
-    val state: StateFlow<RatesUiState> = combine(settings.settings, expenses.expenses, pending) { prefs, all, added ->
+    val state: StateFlow<RatesUiState> = combine(settings.settings, expenses.expenses, pending, updater.status) { prefs, all, added, status ->
         RatesUiState(
             loading = false,
             main = prefs.currency,
             rates = prefs.rates,
             usage = all.mapNotNull { it.originalCurrency }.groupingBy { it }.eachCount(),
             pending = added?.takeIf { it != prefs.currency && it !in prefs.rates },
+            autoRates = prefs.autoRates,
+            updatedAt = prefs.ratesUpdatedAt,
+            provider = prefs.ratesProvider,
+            providerUrl = prefs.ratesProviderUrl,
+            onlineRates = prefs.onlineRates,
+            status = status,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RatesUiState())
 
     /** Shows a row for [currency] to type its rate into; it's saved once the rate is valid. */
     fun add(currency: AppCurrency) {
         pending.value = currency
+        // With automatic updates on, today's rate fills itself in.
+        if (state.value.autoRates) viewModelScope.launch { updater.update(extra = setOf(currency)) }
+    }
+
+    fun updateNow() = viewModelScope.launch { updater.update() }
+
+    fun setAutoRates(enabled: Boolean) = viewModelScope.launch {
+        settings.setAutoRates(enabled)
+        if (enabled) updater.update()
     }
 
     /** [value] is the number in "1 X = [value] Y", written the usual way round. */
@@ -187,6 +218,7 @@ fun ExchangeRatesScreen(
                     )
                 }
             }
+            item { AutoUpdateCard(state, onToggle = viewModel::setAutoRates, onUpdateNow = viewModel::updateNow) }
             if (!state.loading && state.rates.isEmpty() && state.pending == null) {
                 item {
                     EmptyState(
@@ -201,6 +233,7 @@ fun ExchangeRatesScreen(
                     currency = currency,
                     main = state.main,
                     rate = state.rates.getValue(currency),
+                    online = currency in state.onlineRates,
                     used = state.usage[currency] ?: 0,
                     onChange = { viewModel.setRate(currency, it) },
                     onRemove = { viewModel.remove(currency) },
@@ -209,7 +242,7 @@ fun ExchangeRatesScreen(
             if (state.rates.isNotEmpty()) {
                 item {
                     Text(
-                        stringResource(R.string.rate_existing_note),
+                        stringResource(R.string.rate_existing_note) + if (state.autoRates) "\n" + stringResource(R.string.rates_auto_note) else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp),
@@ -232,12 +265,23 @@ fun ExchangeRatesScreen(
 }
 
 @Composable
-private fun RateRow(currency: AppCurrency, main: AppCurrency, rate: Double?, used: Int, onChange: (Double) -> Unit, onRemove: () -> Unit) {
+private fun RateRow(
+    currency: AppCurrency,
+    main: AppCurrency,
+    rate: Double?,
+    used: Int,
+    onChange: (Double) -> Unit,
+    onRemove: () -> Unit,
+    online: Boolean = false,
+) {
     val foreignFirst = Exchange.foreignFirst(currency, main)
     val one = if (foreignFirst) currency else main
     val other = if (foreignFirst) main else currency
     // Typed text is kept as typed; only a valid number is saved.
-    var text by remember(currency, main) { mutableStateOf(rate?.let { Exchange.rateToInput(Exchange.quote(currency, main, it).value) }.orEmpty()) }
+    // A downloaded rate refreshes the field; one you're typing is left alone.
+    var text by remember(currency, main, if (online) rate else null) {
+        mutableStateOf(rate?.let { Exchange.rateToInput(Exchange.quote(currency, main, it).value) }.orEmpty())
+    }
     val focus = remember { FocusRequester() }
     if (rate == null) LaunchedEffect(currency) { focus.requestFocus() }
     Column(
@@ -253,8 +297,9 @@ private fun RateRow(currency: AppCurrency, main: AppCurrency, rate: Double?, use
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("${currency.title()} (${currency.name})", style = MaterialTheme.typography.titleSmall)
+                val usage = if (used > 0) pluralStringResource(R.plurals.rate_used_by, used, used) else stringResource(R.string.rate_not_used)
                 Text(
-                    if (used > 0) pluralStringResource(R.plurals.rate_used_by, used, used) else stringResource(R.string.rate_not_used),
+                    if (online) usage + " · " + stringResource(R.string.rate_from_internet) else usage,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -355,4 +400,62 @@ private fun CurrencyListDialog(options: List<AppCurrency>, onSelect: (AppCurrenc
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** Automatic updates: on/off, when the rates were last downloaded and from where, and "Update now". */
+@Composable
+private fun AutoUpdateCard(state: RatesUiState, onToggle: (Boolean) -> Unit, onUpdateNow: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    val timeFormat = dateFormatter(R.string.pattern_day_time)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.card)
+            .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.CloudSync, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.auto_rates), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.auto_rates_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.width(8.dp))
+            Switch(checked = state.autoRates, onCheckedChange = onToggle, modifier = Modifier.testTag("auto_rates"))
+        }
+        if (state.autoRates) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                val failed = state.status == RateStatus.FAILED
+                val text = when {
+                    failed -> stringResource(R.string.rates_update_failed)
+                    state.updatedAt > 0 -> stringResource(
+                        R.string.rates_updated,
+                        timeFormat.format(Instant.ofEpochMilli(state.updatedAt).atZone(ZoneId.systemDefault())),
+                        state.provider,
+                    )
+                    else -> stringResource(R.string.rates_never_updated)
+                }
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(MaterialTheme.shapes.small)
+                        // The rates' source, as its terms ask: tap to open its site.
+                        .clickable(enabled = !failed && state.providerUrl.isNotEmpty()) { uriHandler.openUri(state.providerUrl) }
+                        .padding(vertical = 6.dp)
+                        .testTag("rates_status"),
+                )
+                if (state.status == RateStatus.UPDATING) {
+                    CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    TextButton(onClick = onUpdateNow, enabled = state.rates.isNotEmpty(), modifier = Modifier.testTag("update_rates")) {
+                        Text(stringResource(R.string.update_now))
+                    }
+                }
+            }
+        }
+    }
 }

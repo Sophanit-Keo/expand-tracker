@@ -581,9 +581,17 @@ private fun RateCard(state: EditUiState, onRateChange: (String) -> Unit, modifie
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            stringResource(if (state.showRateError) R.string.rate_error else R.string.rate_hint),
+            stringResource(
+                when {
+                    state.showRateError -> R.string.rate_error
+                    state.fetchingRate -> R.string.getting_rate
+                    state.rateIsOnline -> R.string.rate_hint_online
+                    else -> R.string.rate_hint
+                },
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = if (state.showRateError) colors.error else colors.onSurfaceVariant,
+            modifier = Modifier.testTag("rate_hint"),
         )
     }
 }

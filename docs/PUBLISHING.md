@@ -100,7 +100,7 @@ Play rejects debug-signed bundles.
 | **App access** | All functionality is available without special access (no login). |
 | **Content rating** | Fill in the questionnaire. Category: *Utility, Productivity, Communication or Other*. Answer "No" to violence, gambling etc. Expect *Everyone / PEGI 3*. |
 | **Target audience** | 18 and over (avoids the extra Families rules; it's a finance app). |
-| **Data safety** | **No data collected, no data shared.** The app has no internet permission and keeps everything on the device. Data can be deleted in the app (Settings → Delete all). |
+| **Data safety** | **No data collected, no data shared.** Entries stay on the device. The only internet use is downloading public exchange rates; the request contains just the main currency code (e.g. "USD"), no user data. Data can be deleted in the app (Settings → Delete all). |
 | **Financial features** | Declare what applies. This is a personal budgeting tool: it doesn't move money, offer loans, or connect to bank accounts. Statements are imported from files on the phone. |
 | **Government app / News / Health** | No. |
 
@@ -156,10 +156,10 @@ CLEAR ANALYTICS
 
 PRIVATE BY DESIGN
 • No account, no ads, no tracking
-• No internet permission: your data never leaves your phone
+• Your entries never leave your phone (the internet is only used for exchange rates)
 • Export to CSV whenever you like
 
-Also: English and Khmer, expenses in several currencies with your own exchange rates (USD, EUR, KHR, THB, VND and more), plus dark mode and Material You colours.
+Also: English and Khmer, expenses in several currencies with exchange rates updated automatically (USD, EUR, KHR, THB, VND and more), plus dark mode and Material You colours.
 ```
 
 ### Khmer listing (ភាសាខ្មែរ)

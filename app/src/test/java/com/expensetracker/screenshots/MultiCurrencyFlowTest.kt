@@ -18,6 +18,7 @@ import com.expensetracker.MainActivity
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.Expense
+import com.expensetracker.data.FixedRates
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -43,10 +44,11 @@ class MultiCurrencyFlowTest {
     private val settings get() = runBlocking { container.settingsRepository.settings.first() }
 
     @Before
-    fun reset() = runBlocking {
+    fun reset(): Unit = runBlocking {
         container.expenseRepository.clear()
         container.settingsRepository.setCurrency(AppCurrency.USD)
         AppCurrency.entries.forEach { container.settingsRepository.removeRate(it) }
+        container.settingsRepository.setAutoRates(true)
     }
 
     private fun openNewExpense() {
@@ -149,6 +151,41 @@ class MultiCurrencyFlowTest {
         compose.onNode(hasTestTag("quote_input")).performTextInput("36")
         waitFor { AppCurrency.THB in settings.rates }
         assertEquals(1 / 36.0, settings.rates.getValue(AppCurrency.THB), 1e-12)
+    }
+
+    @Test
+    fun todaysRateIsFilledInFromTheInternet() {
+        container.rateSource = FixedRates()
+        openHistory()
+        openNewExpense()
+        pickCurrency(AppCurrency.THB)
+        // Main USD: "1 USD = 36 THB", downloaded.
+        compose.waitUntilAtLeastOneExists(hasTestTag("rate_input") and hasText("36"), timeoutMillis = 10_000)
+        compose.onNodeWithText("Today's rate from the internet. You can change it for this entry.").assertExists()
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("90")
+        compose.waitUntilAtLeastOneExists(hasText("Counts as $2.50"), timeoutMillis = 5_000)
+        compose.onNodeWithText("Save expense").performClick()
+        compose.waitUntilDoesNotExist(hasText("Save expense"), timeoutMillis = 10_000)
+        val saved = runBlocking { container.expenseRepository.getAll() }.single()
+        assertEquals(2.5, saved.amount, 1e-12)
+        // Kept as the downloaded rate, so the next update refreshes it.
+        assertEquals(setOf(AppCurrency.THB), settings.onlineRates)
+    }
+
+    @Test
+    fun updateNowRefreshesSavedRates() {
+        runBlocking { container.settingsRepository.setRate(AppCurrency.KHR, 1 / 4000.0) }
+        container.rateSource = FixedRates()
+        compose.waitUntilAtLeastOneExists(hasTestTag("nav_settings"), timeoutMillis = 10_000)
+        compose.onNode(hasTestTag("nav_settings")).performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("settings_rates"), timeoutMillis = 10_000)
+        compose.onNode(hasTestTag("settings_rates")).performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("update_rates"), timeoutMillis = 10_000)
+        compose.onNode(hasTestTag("update_rates")).performClick()
+        waitFor { AppCurrency.KHR in settings.onlineRates }
+        assertEquals(1 / 4100.0, settings.rates.getValue(AppCurrency.KHR), 1e-15)
+        compose.waitUntilAtLeastOneExists(hasTestTag("quote_input") and hasText("4100"), timeoutMillis = 5_000)
+        compose.waitUntilAtLeastOneExists(hasText("Rates by ExchangeRate-API", substring = true), timeoutMillis = 5_000)
     }
 
     @Test

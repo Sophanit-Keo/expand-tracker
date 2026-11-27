@@ -481,4 +481,15 @@
     </plurals>
     <string name="rate_not_used">មិនទាន់ប្រើ</string>
     <string name="rate_existing_note">ការប្ដូរអត្រា មិនប្ដូរកំណត់ត្រាដែលបានរក្សាទុករួចទេ៖ កំណត់ត្រានីមួយៗរក្សាអត្រាដែលបានប្រើពេលរក្សាទុក។</string>
+    <string name="pattern_day_time">d MMM HH:mm</string>
+    <string name="auto_rates">ធ្វើបច្ចុប្បន្នភាពអត្រាដោយស្វ័យប្រវត្តិ</string>
+    <string name="auto_rates_hint">អត្រាថ្ងៃនេះពីអ៊ីនធឺណិត រហូតដល់ពីរដងក្នុងមួយថ្ងៃ ពេលអ្នកបើកកម្មវិធី។ មានតែរូបិយប័ណ្ណគោលរបស់អ្នកប៉ុណ្ណោះដែលត្រូវបានផ្ញើ។</string>
+    <string name="rates_updated">បានធ្វើបច្ចុប្បន្នភាព %1$s · អត្រាដោយ %2$s</string>
+    <string name="rates_never_updated">មិនទាន់បានធ្វើបច្ចុប្បន្នភាព</string>
+    <string name="rates_update_failed">មិនអាចធ្វើបច្ចុប្បន្នភាពបានទេ។ សូមពិនិត្យអ៊ីនធឺណិត ហើយព្យាយាមម្ដងទៀត។</string>
+    <string name="update_now">ធ្វើបច្ចុប្បន្នភាពឥឡូវ</string>
+    <string name="rate_from_internet">ពីអ៊ីនធឺណិត</string>
+    <string name="rate_hint_online">អត្រាថ្ងៃនេះពីអ៊ីនធឺណិត។ អ្នកអាចប្ដូរវាសម្រាប់កំណត់ត្រានេះ។</string>
+    <string name="getting_rate">កំពុងទាញយកអត្រាថ្ងៃនេះ…</string>
+    <string name="rates_auto_note">អត្រាដែលអ្នកវាយបញ្ចូល នឹងត្រូវជំនួសនៅពេលធ្វើបច្ចុប្បន្នភាពលើកក្រោយ។ បិទការធ្វើបច្ចុប្បន្នភាពស្វ័យប្រវត្តិ ដើម្បីរក្សាអត្រារបស់អ្នក។</string>
 </resources>

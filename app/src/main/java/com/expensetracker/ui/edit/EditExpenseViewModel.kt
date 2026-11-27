@@ -8,6 +8,7 @@ import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.EntryType
 import com.expensetracker.data.Expense
+import com.expensetracker.data.RatesUpdater
 import com.expensetracker.data.ExpenseRepository
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.domain.Exchange
@@ -44,6 +45,11 @@ data class EditUiState(
     /** The rate as typed, the way it's written: the number in "1 USD = [4100] ៛". */
     val rateText: String = "",
     val showRateError: Boolean = false,
+    /** Currencies whose saved rate was downloaded, and whether downloading is on. */
+    val onlineRates: Set<AppCurrency> = emptySet(),
+    val autoRates: Boolean = false,
+    /** Today's rate for the picked currency is being downloaded. */
+    val fetchingRate: Boolean = false,
     val amountText: String = "",
     val category: Category = Category.FOOD,
     val date: LocalDate = LocalDate.now(),
@@ -59,9 +65,23 @@ data class EditUiState(
 
     val isForeign: Boolean get() = entryCurrency != currency
 
+    /** The saved rate is used as is (full precision) while the field still shows it. */
+    private val usesSavedRate: Boolean
+        get() = rates[entryCurrency] != null && rateText == rateInput(entryCurrency, currency, rates[entryCurrency])
+
+    /** The rate shown was downloaded today, not typed in. */
+    val rateIsOnline: Boolean get() = isForeign && entryCurrency in onlineRates && usesSavedRate
+
     /** Main-currency units per one unit of [entryCurrency]. */
     val rate: Double?
-        get() = if (!isForeign) 1.0 else rateText.toDoubleOrNull()?.let { Exchange.rateFromQuote(entryCurrency, currency, it) }
+        get() = when {
+            !isForeign -> 1.0
+            usesSavedRate -> rates[entryCurrency]
+            else -> rateText.toDoubleOrNull()?.let { Exchange.rateFromQuote(entryCurrency, currency, it) }
+        }
+
+    /** The rate typed differs from the saved one, so it should be remembered. */
+    val rateChanged: Boolean get() = isForeign && !usesSavedRate
 
     /** The amount in the main currency: what totals and charts count. */
     val mainAmount: Double? get() = amount?.let { a -> rate?.let { a * it } }
@@ -83,6 +103,7 @@ class EditExpenseViewModel(
     savedStateHandle: SavedStateHandle,
     private val expenses: ExpenseRepository,
     private val settings: SettingsRepository,
+    private val rateUpdater: RatesUpdater,
 ) : ViewModel() {
     private val expenseId: Long? = savedStateHandle.get<Long>("id")?.takeIf { it > 0 }
     private val requestedType: EntryType =
@@ -116,7 +137,14 @@ class EditExpenseViewModel(
             val existing = expenseId?.let { expenses.get(it) }
             original = existing
             _state.update {
-                val base = it.copy(loading = false, currency = currency, entryCurrency = currency, rates = prefs.rates)
+                val base = it.copy(
+                    loading = false,
+                    currency = currency,
+                    entryCurrency = currency,
+                    rates = prefs.rates,
+                    onlineRates = prefs.onlineRates,
+                    autoRates = prefs.autoRates,
+                )
                 when {
                     existing != null -> {
                         val foreign = existing.foreign
@@ -170,14 +198,35 @@ class EditExpenseViewModel(
     }
 
     /** Typing the amount in another currency: the saved rate for it is filled in, and can be changed. */
-    fun onCurrencyChange(currency: AppCurrency) = _state.update {
-        if (it.entryCurrency == currency) return@update it
-        it.copy(
-            entryCurrency = currency,
-            amountText = amountFor(it.amountText, currency),
-            rateText = rateInput(currency, it.currency, it.rates[currency]),
-            showRateError = false,
-        )
+    fun onCurrencyChange(currency: AppCurrency) {
+        _state.update {
+            if (it.entryCurrency == currency) return@update it
+            it.copy(
+                entryCurrency = currency,
+                amountText = amountFor(it.amountText, currency),
+                rateText = rateInput(currency, it.currency, it.rates[currency]),
+                showRateError = false,
+            )
+        }
+        val s = _state.value
+        if (s.isForeign && s.autoRates && s.rates[currency] == null) fetchRate(currency)
+    }
+
+    /** No rate saved yet: download today's, and fill it in unless something was typed meanwhile. */
+    private fun fetchRate(currency: AppCurrency) {
+        _state.update { it.copy(fetchingRate = true) }
+        viewModelScope.launch {
+            rateUpdater.update(extra = setOf(currency))
+            val prefs = settings.settings.first()
+            _state.update { s ->
+                val fresh = s.copy(fetchingRate = false, rates = prefs.rates, onlineRates = prefs.onlineRates)
+                if (s.entryCurrency == currency && s.rateText.isEmpty()) {
+                    fresh.copy(rateText = rateInput(currency, s.currency, prefs.rates[currency]), showRateError = false)
+                } else {
+                    fresh
+                }
+            }
+        }
     }
 
     fun onRateChange(text: String) = _state.update {
@@ -269,8 +318,8 @@ class EditExpenseViewModel(
                 originalAmount = amount.takeIf { foreign },
                 originalCurrency = current.entryCurrency.takeIf { foreign },
             )
-            // The rate used becomes the one suggested next time.
-            if (foreign) settings.setRate(current.entryCurrency, rate)
+            // A rate you typed becomes the one suggested next time.
+            if (current.rateChanged) settings.setRate(current.entryCurrency, rate)
             val signed = (if (expense.isIncome) "+" else "−") + formatMoney(amount, current.entryCurrency)
             if (before == null) {
                 val id = expenses.add(expense)

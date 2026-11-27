@@ -65,7 +65,7 @@ class TranslationCatalogTest {
     fun khmerTextIsKhmer() {
         // A string that is still English in values-km was probably copied by mistake.
         val allowed = setOf("chart_point", "with_year", "pattern_day", "pattern_day_year", "pattern_short_day", "pattern_month_year",
-            "pattern_week_start_same_month", "pattern_week_end_same_month", "pattern_date_year", "pending_both")
+            "pattern_week_start_same_month", "pattern_week_end_same_month", "pattern_date_year", "pattern_day_time", "pending_both")
         val notKhmer = khmer.filter { (name, km) -> name !in allowed && km.texts.values.none { t -> t.any { it in 'ក'..'៿' } } }.keys
         assertTrue("Not translated: $notKhmer", notKhmer.isEmpty())
     }

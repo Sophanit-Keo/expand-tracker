@@ -82,7 +82,7 @@ private fun FeatureGraphic(icon: ImageBitmap, screen: ImageBitmap?) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.linearGradient(listOf(Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFFB0189E)))),
+            .background(Brush.linearGradient(listOf(Color(0xFF2F7BFF), Color(0xFF1D4ED8), Color(0xFF0A1F5C)))),
     ) {
         Row(Modifier.fillMaxSize().padding(start = 72.dp, end = 64.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -91,7 +91,7 @@ private fun FeatureGraphic(icon: ImageBitmap, screen: ImageBitmap?) {
                 Text("Expense Tracker", color = Color.White, fontSize = 58.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Spending, income and cash flow.\nImport your bank statement in seconds.",
+                    "Spending, income and cash flow.\nDollars, riel and more, with live rates.",
                     color = Color.White.copy(alpha = 0.92f),
                     fontSize = 26.sp,
                     lineHeight = 36.sp,

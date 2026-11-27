@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.ExpenseRepository
+import com.expensetracker.data.RatesUpdater
 import com.expensetracker.data.SettingsRepository
 import com.expensetracker.data.UserSettings
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +24,7 @@ data class AppState(val settings: UserSettings, val showOnboarding: Boolean)
 class AppStateViewModel(
     private val expenses: ExpenseRepository,
     private val settings: SettingsRepository,
+    private val rates: RatesUpdater,
 ) : ViewModel() {
 
     /** Null until settings and data have loaded; the splash screen stays up until then. */
@@ -33,6 +35,8 @@ class AppStateViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
+        // Today's exchange rates, when the saved ones are more than half a day old.
+        viewModelScope.launch { rates.updateIfDue() }
         // People who used the app before setup existed already have data: don't greet them again.
         viewModelScope.launch {
             state.filterNotNull().collect { s ->

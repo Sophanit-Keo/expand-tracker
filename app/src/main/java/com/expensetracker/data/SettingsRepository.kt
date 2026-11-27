@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.expensetracker.domain.Exchange
@@ -56,6 +57,14 @@ data class UserSettings(
     val onboarded: Boolean = false,
     /** Saved exchange rates: how much of the main [currency] one unit of each other currency is worth. */
     val rates: Map<AppCurrency, Double> = emptyMap(),
+    /** Download today's rates from the internet (once or twice a day). */
+    val autoRates: Boolean = true,
+    /** When rates were last downloaded (epoch millis), 0 if never or since the main currency changed. */
+    val ratesUpdatedAt: Long = 0,
+    /** Currencies whose saved rate came from the internet rather than being typed in. */
+    val onlineRates: Set<AppCurrency> = emptySet(),
+    val ratesProvider: String = "",
+    val ratesProviderUrl: String = "",
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -68,6 +77,11 @@ class SettingsRepository(private val context: Context) {
         val dynamicColor = booleanPreferencesKey("dynamic_color")
         val onboarded = booleanPreferencesKey("onboarded")
         val rates = stringPreferencesKey("exchange_rates")
+        val autoRates = booleanPreferencesKey("auto_rates")
+        val ratesUpdatedAt = longPreferencesKey("rates_updated_at")
+        val onlineRates = stringPreferencesKey("online_rates")
+        val ratesProvider = stringPreferencesKey("rates_provider")
+        val ratesProviderUrl = stringPreferencesKey("rates_provider_url")
     }
 
     val settings: Flow<UserSettings> = context.dataStore.data.map { it.toSettings() }
@@ -77,17 +91,36 @@ class SettingsRepository(private val context: Context) {
         val old = enumValueOrDefault(it[Keys.currency], AppCurrency.USD)
         it[Keys.currency] = currency.name
         it[Keys.rates] = Exchange.encode(Exchange.rebase(Exchange.decode(it[Keys.rates]), old, currency))
+        // Download fresh rates against the new main currency next time.
+        if (old != currency) it[Keys.ratesUpdatedAt] = 0L
     }
 
     /** Saves the rate for [currency]: one unit of it is worth [rate] of the main currency. */
     suspend fun setRate(currency: AppCurrency, rate: Double) = context.dataStore.edit {
         if (rate.isFinite() && rate > 0 && currency.name != (it[Keys.currency] ?: AppCurrency.USD.name)) {
             it[Keys.rates] = Exchange.encode(Exchange.decode(it[Keys.rates]) + (currency to rate))
+            // Typed in by you: no longer the downloaded rate.
+            it[Keys.onlineRates] = encodeSet(decodeSet(it[Keys.onlineRates]) - currency)
         }
     }
 
+    /** Saves downloaded [rates] (main per one unit), unless the main currency changed meanwhile. */
+    suspend fun saveOnlineRates(base: AppCurrency, rates: Map<AppCurrency, Double>, at: Long, provider: String, providerUrl: String) =
+        context.dataStore.edit {
+            if ((it[Keys.currency] ?: AppCurrency.USD.name) != base.name) return@edit
+            val valid = rates.filter { (c, r) -> c != base && r.isFinite() && r > 0 }
+            it[Keys.rates] = Exchange.encode(Exchange.decode(it[Keys.rates]) + valid)
+            it[Keys.onlineRates] = encodeSet(decodeSet(it[Keys.onlineRates]) + valid.keys)
+            it[Keys.ratesUpdatedAt] = at
+            it[Keys.ratesProvider] = provider
+            it[Keys.ratesProviderUrl] = providerUrl
+        }
+
+    suspend fun setAutoRates(enabled: Boolean) = context.dataStore.edit { it[Keys.autoRates] = enabled }
+
     suspend fun removeRate(currency: AppCurrency) = context.dataStore.edit {
         it[Keys.rates] = Exchange.encode(Exchange.decode(it[Keys.rates]) - currency)
+        it[Keys.onlineRates] = encodeSet(decodeSet(it[Keys.onlineRates]) - currency)
     }
 
     suspend fun setMonthlyBudget(amount: Double) = context.dataStore.edit { it[Keys.budget] = amount.coerceAtLeast(0.0) }
@@ -105,8 +138,18 @@ class SettingsRepository(private val context: Context) {
         dynamicColor = this[Keys.dynamicColor] ?: false,
         onboarded = this[Keys.onboarded] ?: false,
         rates = Exchange.decode(this[Keys.rates]),
+        autoRates = this[Keys.autoRates] ?: true,
+        ratesUpdatedAt = this[Keys.ratesUpdatedAt] ?: 0L,
+        onlineRates = decodeSet(this[Keys.onlineRates]),
+        ratesProvider = this[Keys.ratesProvider].orEmpty(),
+        ratesProviderUrl = this[Keys.ratesProviderUrl].orEmpty(),
     )
 }
+
+private fun encodeSet(set: Set<AppCurrency>): String = set.sortedBy { it.ordinal }.joinToString(",") { it.name }
+
+private fun decodeSet(text: String?): Set<AppCurrency> =
+    text.orEmpty().split(',').mapNotNull { code -> AppCurrency.entries.firstOrNull { it.name == code } }.toSet()
 
 private inline fun <reified T : Enum<T>> enumValueOrDefault(name: String?, default: T): T =
     enumValues<T>().firstOrNull { it.name == name } ?: default

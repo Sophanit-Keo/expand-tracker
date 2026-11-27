@@ -490,4 +490,8 @@ private val openSourceLibraries = listOf(
     "Android Jetpack (AndroidX): Compose, Material 3, Room, Navigation, Lifecycle, DataStore" to "Copyright © The Android Open Source Project. $APACHE_2",
     "Kotlin and kotlinx.coroutines" to "Copyright © JetBrains s.r.o. and Kotlin Programming Language contributors. $APACHE_2",
     "Material Symbols icons" to "Copyright © Google LLC. $APACHE_2",
+    "Inter and Noto Sans Khmer (logo)" to "The \$ and ៛ signs in the app icon are drawn from Inter (Copyright © The Inter Project Authors) " +
+        "and Noto Sans Khmer (Copyright © Google LLC). Licensed under the SIL Open Font License 1.1: https://openfontlicense.org",
+    "Exchange rates" to "Rates by ExchangeRate-API (https://www.exchangerate-api.com), with currency-api by Fawaz Ahmed " +
+        "(https://github.com/fawazahmed0/exchange-api) as a fallback.",
 )

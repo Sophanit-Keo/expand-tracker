@@ -1,7 +1,7 @@
 # Expense Tracker
 
 An Android app for tracking daily expenses and income, and seeing where your money goes and what's left, with interactive charts.
-Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the device; there's no account and no internet use.
+Built with Kotlin, Jetpack Compose and Material 3. Everything is stored on the device and there's no account. The internet is used only to download exchange rates, and that can be turned off.
 Available in **English** and **ខ្មែរ (Khmer)**.
 
 <p>
@@ -35,6 +35,7 @@ Available in **English** and **ខ្មែរ (Khmer)**.
 - **English and ខ្មែរ (Khmer)**: pick the language on the welcome screen or in Settings → Language, or follow the phone's language. Every screen, message, plural, date, month and weekday name and chart label is translated, and Khmer text gets taller line spacing so its vowels and subscripts are never clipped. The choice is kept across restarts and shows in Android's per-app language settings (Android 13+).
 - **Smooth start**: a short welcome on first launch picks your currency from the phone's region and sets an optional budget. A splash screen avoids any theme flash, there are fade-through transitions and predictive back, totals glide to new values, and key actions give haptic feedback.
 - **Several currencies**: tap the currency on the amount to enter an expense or income in another currency (say riel while your main currency is dollars). Type the exchange rate the usual way round ("1 USD = 4,100 ៛"); the entry shows what it counts as in your main currency, and the rate is remembered for next time. Each entry keeps its own rate, lists show both amounts, and **Settings → Exchange rates** lets you add, change or remove rates. Changing the main currency re-expresses saved rates in it.
+- **Automatic exchange rates**: with **Update rates automatically** on (the default), today's rates are downloaded when the app opens (at most twice a day), when you add a currency, or with **Update now**, from [ExchangeRate-API](https://www.exchangerate-api.com)'s open endpoint with the open-source [currency-api](https://github.com/fawazahmed0/exchange-api) as a fallback. Picking a currency you haven't used fills in today's rate. Only the main currency code is sent. Offline, the saved rates keep working.
 - **Fast entry**: **Quick fill** chips for things you enter often (one tap fills note, category and amount), the **category is picked from your note** as you type ("Grab" → Transport), "Saved · **Undo**" after every save, edit or delete, **Duplicate** an entry, switch between Expense and Income, big amount field, color-coded categories (12 for spending, 7 for income: Salary, Business, Interest & investments, Refunds, Gifts received, Transfers in, Other), quick "Today / Yesterday" dates, optional note.
 - **Home dashboard**: this month's total vs. last month, a monthly budget progress bar, today and this week, last 7 days chart, top categories and recent transactions.
 - **Analytics** by week, month or year (step back through past periods):
@@ -88,6 +89,7 @@ for the App Bundle, store graphics in [`docs/play-store/`](docs/play-store/), an
 | Languages | English (`values/`) and Khmer (`values-km/`) string resources with plurals; per-app language through AppCompat (`locales_config.xml`) |
 | Charts | Hand-written with Compose `Canvas` (no chart library): donut, column, smoothed line |
 | Storage | Room (expenses, learned merchant categories), DataStore Preferences (settings); exported schemas in `app/schemas` |
+| Exchange rates | `HttpURLConnection` + `org.json` (no SDK, no key): open.er-api.com, falling back to cdn.jsdelivr.net/npm/@fawazahmed0/currency-api |
 | Statement import | Own CSV and .xlsx readers; [PdfBox-Android](https://github.com/TomRoush/PdfBox-Android) for PDF text |
 | Architecture | MVVM: `ViewModel` + `StateFlow`, a single-activity Navigation Compose app, a small manual DI container |
 | Min / target SDK | 26 (Android 8.0) / 36 |
@@ -119,8 +121,9 @@ app/src/main/java/com/expensetracker/
 - `StatementAccuracyTest`: regressions for wrong imports (time after date, dot thousands, all-positive amounts with a balance column), printed totals and balances
 - `StatementStatusTest`: statement vs cash flow comparison and its explanations
 - `MoneyInFormatsTest`: 11 ways statements show money in vs money out
+- `RateSourceTest`, `RatesUpdaterTest`: real responses from both rate services, saving downloaded rates, twice-a-day timing, offline, and a main-currency change mid-download
 - `ExchangeTest`: rate direction, conversion, re-basing rates on a new main currency, storage
-- `MultiCurrencyFlowTest`: an expense in riel converted and its rate remembered, a missing rate, editing keeps currency and rate, adding a rate in Settings
+- `MultiCurrencyFlowTest`: an expense in riel converted and its rate remembered, a missing rate, editing keeps currency and rate, adding a rate in Settings, today's rate filled in, Update now
 - `SmoothFlowsTest`: first-run setup, existing users skipping it, quick fill, Save → Undo, category from the note, duplicate, logging a recurring item, search across months
 - `ImporterIntegrationTest`: real generated PDF (plain and password-protected) and .xlsx files, plus database upgrades from v1, v2, v3 and v4
 - `ImportFlowTest`: picks a CSV statement, checks it adds up (and that ⇅ breaks and restores the check), imports it, confirms the cash flow matches the statement, then re-imports to check for duplicates

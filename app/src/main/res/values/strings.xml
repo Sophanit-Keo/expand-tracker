@@ -508,4 +508,15 @@
     </plurals>
     <string name="rate_not_used">Not used yet</string>
     <string name="rate_existing_note">Changing a rate doesn\'t change entries you already saved: each keeps the rate it was saved with.</string>
+    <string name="pattern_day_time">MMM d, HH:mm</string>
+    <string name="auto_rates">Update rates automatically</string>
+    <string name="auto_rates_hint">Today\'s rates from the internet, up to twice a day when you open the app. Only your main currency is sent.</string>
+    <string name="rates_updated">Updated %1$s · Rates by %2$s</string>
+    <string name="rates_never_updated">Not updated yet</string>
+    <string name="rates_update_failed">Couldn\'t update. Check your internet connection and try again.</string>
+    <string name="update_now">Update now</string>
+    <string name="rate_from_internet">from the internet</string>
+    <string name="rate_hint_online">Today\'s rate from the internet. You can change it for this entry.</string>
+    <string name="getting_rate">Getting today\'s rate…</string>
+    <string name="rates_auto_note">Rates you type are replaced at the next update. Turn automatic updates off to keep your own.</string>
 </resources>

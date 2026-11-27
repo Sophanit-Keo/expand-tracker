@@ -20,6 +20,7 @@ import com.expensetracker.R
 import com.expensetracker.data.AppCurrency
 import com.expensetracker.data.Category
 import com.expensetracker.data.Expense
+import com.expensetracker.data.FixedRates
 import com.expensetracker.data.SampleData
 import com.expensetracker.ui.analytics.AnalyticsTab
 import com.expensetracker.ui.analytics.AnalyticsTabs
@@ -49,7 +50,7 @@ abstract class AppScreenshotTest(
 ) {
     /** Runs before the activity starts, so first-run setup never covers the screen. */
     @get:Rule(order = 0)
-    val skipSetup = SkipFirstRunSetup()
+    val skipSetup = SkipFirstRunSetup(rates = { FixedRates() })
 
     @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
@@ -67,6 +68,8 @@ abstract class AppScreenshotTest(
             AppCurrency.entries.forEach { container.settingsRepository.removeRate(it) }
             container.settingsRepository.setRate(AppCurrency.KHR, 1 / 4100.0)
             container.settingsRepository.setRate(AppCurrency.THB, 1 / 36.0)
+            container.settingsRepository.setAutoRates(true)
+            container.ratesUpdater.update() // today's rates "from the internet"
             val today = LocalDate.now()
             container.expenseRepository.addAll(
                 listOf(

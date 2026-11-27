@@ -19,11 +19,11 @@ object AppViewModelProvider {
         initializer { HomeViewModel(container.expenseRepository, container.settingsRepository) }
         initializer { HistoryViewModel(container.expenseRepository, container.settingsRepository) }
         initializer { AnalyticsViewModel(container.expenseRepository, container.settingsRepository) }
-        initializer { EditExpenseViewModel(createSavedStateHandle(), container.expenseRepository, container.settingsRepository) }
+        initializer { EditExpenseViewModel(createSavedStateHandle(), container.expenseRepository, container.settingsRepository, container.ratesUpdater) }
         initializer { SettingsViewModel(container.expenseRepository, container.settingsRepository) }
         initializer { ImportViewModel(container.statementImporter, container.expenseRepository, container.settingsRepository) }
-        initializer { AppStateViewModel(container.expenseRepository, container.settingsRepository) }
-        initializer { ExchangeRatesViewModel(container.expenseRepository, container.settingsRepository) }
+        initializer { AppStateViewModel(container.expenseRepository, container.settingsRepository, container.ratesUpdater) }
+        initializer { ExchangeRatesViewModel(container.expenseRepository, container.settingsRepository, container.ratesUpdater) }
     }
 }
 

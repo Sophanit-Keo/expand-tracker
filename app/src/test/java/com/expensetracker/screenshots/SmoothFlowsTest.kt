@@ -208,7 +208,10 @@ class SmoothFlowsTest {
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "km-w400dp-h880dp-xxhdpi")
 class KhmerWelcomeTest {
-    @get:org.junit.Rule
+    @get:org.junit.Rule(order = 0)
+    val offline = SkipFirstRunSetup(except = setOf("welcomeIsInKhmer"))
+
+    @get:org.junit.Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
